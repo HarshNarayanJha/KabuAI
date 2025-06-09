@@ -43,6 +43,7 @@ def fetch_stock_details(ticker: str) -> StockData:
     """
 
     print(f"Fetch stock details tool used {ticker}")
+
     data = yf.Ticker(ticker)
     try:
         # try loading the data
@@ -60,13 +61,13 @@ def fetch_stock_details(ticker: str) -> StockData:
     info: dict[str, str] = data.info
     metadata = StockMetadata(
         symbol=info["symbol"],
-        company_name=info.get("longName") or info.get("shortName"),
-        sector=info["sector"],
-        industry=info["industry"],
-        market_cap=int(info["marketCap"]),
-        pe_ratio=float(info["trailingPE"]) if "trailingPE" in info else None,
+        company_name=info.get("longName") or info.get("shortName", ""),
+        sector=info.get("sector", ""),
+        industry=info.get("industry", ""),
+        market_cap=int(info.get("marketCap", 0)) or None,
+        pe_ratio=float(info.get("trailingPE", 0)) or None,
         dividend_yield=float(info.get("dividendYield", 0)) * 100,
-        beta=float(info["beta"]),
+        beta=float(info.get("beta", 0)),
     )
 
     # --- Price History ---
@@ -74,12 +75,12 @@ def fetch_stock_details(ticker: str) -> StockData:
     prices = [
         StockPrice(
             date=cast(Timestamp, index).to_pydatetime(),
-            open=float(row["Open"]),
-            high=float(row["High"]),
-            low=float(row["Low"]),
-            close=float(row["Close"]),
-            adjusted_close=float(row["Adj Close"] if "Adj Close" in row else row["Close"]),
-            volume=int(row["Volume"]),
+            open=cast(float, row.get("Open", 0)),
+            high=cast(float, row.get("High", 0)),
+            low=cast(float, row.get("Low", 0)),
+            close=cast(float, row.get("Close", 0)),
+            adjusted_close=cast(float, row.get("Adj Close", row.get("Close", 0))),
+            volume=cast(int, row.get("Volume", 0)),
         )
         for index, row in hist.iterrows()
     ]
@@ -97,22 +98,22 @@ def fetch_stock_details(ticker: str) -> StockData:
         shareholders_equity=balance.loc["Total Stockholder Equity"].dropna().iloc[0]
         if "Total Stockholder Equity" in balance
         else None,
-        current_ratio=float(info["currentRatio"]),
-        quick_ratio=float(info["quickRatio"]),
-        return_on_equity=float(info["returnOnEquity"]),
-        return_on_assets=float(info["returnOnAssets"]),
+        current_ratio=float(info.get("currentRatio", 0)),
+        quick_ratio=float(info.get("quickRatio", 0)),
+        return_on_equity=float(info.get("returnOnEquity", 0)),
+        return_on_assets=float(info.get("returnOnAssets", 0)),
     )
 
     # --- News ---
     news = [
         News(
-            date=datetime.fromisoformat(n["content"]["pubDate"]),
-            headline=n["content"]["title"],
-            summary=n["content"]["summary"],
-            content_type=n["content"]["contentType"],
-            url=n["content"]["canonicalUrl"]["url"],
-            region=n["content"]["canonicalUrl"]["region"],
-            provider=n["content"]["provider"]["displayName"],
+            date=datetime.fromisoformat(n.get("content", {}).get("pubDate", "")),
+            headline=n.get("content", {}).get("title", ""),
+            summary=n.get("content", {}).get("summary", ""),
+            content_type=n.get("content", {}).get("contentType", ""),
+            url=n.get("content", {}).get("canonicalUrl", {}).get("url", ""),
+            region=n.get("content", {}).get("canonicalUrl", {}).get("region", ""),
+            provider=n.get("content", {}).get("provider", {}).get("displayName", ""),
         )
         for n in data.news[:10]
     ]
