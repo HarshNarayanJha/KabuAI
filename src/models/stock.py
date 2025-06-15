@@ -41,9 +41,9 @@ class Financials(BaseModel):
 class News(BaseModel):
     date: datetime = Field(description="Date of the news article")
     headline: str = Field(description="News article headline")
-    summary: str = Field(description="Summary of the article")
+    # summary: str = Field(description="Summary of the article")
     content_type: str = Field(description="Type of content")
-    url: str = Field(description="URL of the news article")
+    # url: str = Field(description="URL of the news article")
     region: str | None = Field(None, description="Region where the news originated")
     provider: str | None = Field(None, description="Provider of the news")
 

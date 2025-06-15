@@ -5,6 +5,7 @@ import yfinance as yf
 from curl_cffi.requests.exceptions import HTTPError
 from langchain_core.tools import tool
 from pandas import Timestamp
+from pydantic import BaseModel, Field
 
 from models.stock import Financials, News, StockData, StockMetadata, StockPrice
 
@@ -29,33 +30,40 @@ def search_stock(query: str) -> yf.Ticker:
     return data
 
 
-@tool
-def fetch_stock_details(ticker: str) -> StockData:
+class FetchStockDetailsInput(BaseModel):
+    ticker_or_name: str = Field(description="The ticker symbol of the stock or  name of the company")
+
+
+@tool("fetch_stock_details", args_schema=FetchStockDetailsInput)
+def fetch_stock_details(ticker_or_name: str) -> StockData | str:
     """
     Fetches stock details for a given ticker symbol.
     If the given symbol is not a valid symbol, searches for the term and uses the first result.
+    Do not pass None or no Value
 
     Args:
-        ticker (str): The ticker symbol of the stock.
+        ticker_or_name (str): The ticker symbol of the stock or name of the company.
 
     Returns:
-        StockData: An object containing the stock details.
+        StockData | str: An object containing the stock details or an error message.
     """
 
-    print(f"Fetch stock details tool used {ticker}")
+    print(f"Fetch stock details tool used {ticker_or_name}")
 
-    data = yf.Ticker(ticker)
     try:
-        # try loading the data
+        data = yf.Ticker(ticker_or_name)
         _ = data.info
     except HTTPError as e:
-        if "404" in str(e):
-            # ticker not found, search it
-            data = search_stock(query=ticker)
-        else:
+        if "404" not in str(e):
             raise
+        try:
+            data = search_stock(query=ticker_or_name)
+        except Exception as e:
+            print(f"Failed to fetch stock details. Error: {e}")
+            return "Failed to fetch stock details. Please try again"
     except Exception as e:
-        raise Exception(f"Failed to fetch stock details: {e}")
+        print(f"Failed to fetch stock details. Error: {e}")
+        return "Failed to fetch stock details. Please try again"
 
     # --- Metadata ---
     info: dict[str, str] = data.info
@@ -109,13 +117,20 @@ def fetch_stock_details(ticker: str) -> StockData:
         News(
             date=datetime.fromisoformat(n.get("content", {}).get("pubDate", "")),
             headline=n.get("content", {}).get("title", ""),
-            summary=n.get("content", {}).get("summary", ""),
+            # summary=n.get("content", {}).get("summary", ""),
             content_type=n.get("content", {}).get("contentType", ""),
-            url=n.get("content", {}).get("canonicalUrl", {}).get("url", ""),
+            # url=n.get("content", {}).get("canonicalUrl", {}).get("url", ""),
             region=n.get("content", {}).get("canonicalUrl", {}).get("region", ""),
             provider=n.get("content", {}).get("provider", {}).get("displayName", ""),
         )
         for n in data.news[:10]
     ]
 
+    print("Stock details fetch complete")
+
     return StockData(metadata=metadata, prices=prices, financials=financials, news=news)
+
+
+if __name__ == "__main__":
+    ticker = input("Ticker Or Company Name> ")
+    print(fetch_stock_details.invoke(ticker))
