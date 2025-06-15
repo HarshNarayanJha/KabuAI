@@ -5,6 +5,7 @@ description = "Next Gen AI Agent for Stock Market Analysis and Guidance"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "langchain-ollama>=0.3.3",
     "langchain[google-genai]>=0.3.25",
     "langgraph>=0.4.8",
     "streamlit>=1.45.1",
@@ -16,6 +17,7 @@ reportUnusedCallResult = "none"
 reportUnknownMemberType = "none"
 reportUnknownVariableType = "none"
 reportUnknownArgumentType = "none"
+reportUnknownParameterType = "none"
 reportMissingTypeArgument = "none"
 reportAny = "none"
 useLibraryCodeForTypes = true
