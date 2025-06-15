@@ -177,7 +177,7 @@ if __name__ == "__main__":
         print("========\n\n")
         pprint(
             {
-                "messages": [(message.type, message.content) for message in state["messages"]],
+                "messages": [(message.type, message.content, message.name) for message in state["messages"]],
                 "stock_data": f"{state['stock_data'].metadata}..." if state["stock_data"] else None,
                 "stock_summary": f"{state['stock_summary'][:30]}..." if state["stock_summary"] else None,
                 "ticker": state["ticker"],

@@ -61,6 +61,10 @@ def stock_details_node(state: StockAgentState):
     if not ticker_response.ticker_or_name:
         return {"ticker": None, "stock_data": None, "stock_sumamry": None}
 
+    if state["ticker"] == ticker_response.ticker_or_name:
+        # same ticker, we already have that, no need to fetch
+        return {}
+
     response: StockData = fetch_stock_details.invoke(ticker_response.ticker_or_name)
 
     if DEBUG:

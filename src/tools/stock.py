@@ -7,7 +7,7 @@ from langchain_core.tools import tool
 from pandas import Timestamp
 from pydantic import BaseModel, Field
 
-from models.stock import Financials, News, StockData, StockMetadata, StockPrice
+from models.stock import CompanyDetails, CompanyOfficer, Financials, News, StockData, StockMetadata, StockPrice
 
 
 class HistoryRow(NamedTuple):
@@ -67,6 +67,51 @@ def fetch_stock_details(ticker_or_name: str) -> StockData | str:
 
     # --- Metadata ---
     info: dict[str, str] = data.info
+    officers: list[CompanyOfficer] = []
+
+    for officer in cast(list[dict], info.get("companyOfficers", [])):
+        officers.append(
+            CompanyOfficer(
+                name=officer.get("name", "N/A"),
+                title=officer.get("title", "N/A"),
+                age=officer.get("age", 0),
+                fiscalYear=officer.get("fiscalYear", 0),
+                totalPay=officer.get("totalPay", 0),
+            )
+        )
+
+    company_details = CompanyDetails(
+        longName=info.get("longName", ""),
+        symbol=info.get("symbol", ""),
+        address1=info.get("address1", ""),
+        city=info.get("city", ""),
+        state=info.get("state", ""),
+        zip=info.get("zip", ""),
+        country=info.get("country", ""),
+        phone=info.get("phone", ""),
+        website=info.get("website", ""),
+        industry=info.get("industry", ""),
+        sector=info.get("sector", ""),
+        longBusinessSummary=info.get("longBusinessSummary", ""),
+        fullTimeEmployees=int(info.get("fullTimeEmployees", 0)),
+        companyOfficers=officers,
+        currentPrice=float(info.get("currentPrice", 0)),
+        marketCap=int(info.get("marketCap", 0)),
+        sharesOutstanding=int(info.get("sharesOutstanding", 0)),
+        profitMargins=float(info.get("profitMargins", 0)),
+        returnOnEquity=float(info.get("returnOnEquity", 0)),
+        totalRevenue=int(info.get("totalRevenue", 0)),
+        grossProfits=int(info.get("grossProfits", 0)),
+        freeCashflow=int(info.get("freeCashflow", 0)),
+        operatingCashflow=int(info.get("operatingCashflow", 0)),
+        totalCash=int(info.get("totalCash", 0)),
+        totalDebt=int(info.get("totalDebt", 0)),
+        revenueGrowth=int(info.get("revenueGrowth", 0)),
+        lastFiscalYearEnd=int(info.get("lastFiscalYearEnd", 0)),
+        mostRecentQuarter=int(info.get("mostRecentQuarter", 0)),
+        earningsTimestamp=int(info.get("earningsTimestamp", 0)),
+    )
+
     metadata = StockMetadata(
         symbol=info["symbol"],
         company_name=info.get("longName") or info.get("shortName", ""),
@@ -123,12 +168,12 @@ def fetch_stock_details(ticker_or_name: str) -> StockData | str:
             region=n.get("content", {}).get("canonicalUrl", {}).get("region", ""),
             provider=n.get("content", {}).get("provider", {}).get("displayName", ""),
         )
-        for n in data.news[:10]
+        for n in data.news[:5]
     ]
 
     print("Stock details fetch complete")
 
-    return StockData(metadata=metadata, prices=prices, financials=financials, news=news)
+    return StockData(company=company_details, metadata=metadata, prices=prices, financials=financials, news=news)
 
 
 if __name__ == "__main__":
