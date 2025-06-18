@@ -1,6 +1,8 @@
+from typing import Final
+
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-PROMPT = """
+PROMPT: Final[str] = """
 You are a stock market expert acting as a task manager between users and specialized agents.
 
 You have access to the following agents: {members}.
@@ -32,7 +34,7 @@ USER INTERACTION GUIDELINES:
 Remember: Your role is to coordinate and manage the conversation flow, not to provide stock information directly.
 """
 
-DONE_PROMPT = """
+DONE_PROMPT: Final[str] = """
 Review the message history and provide a concise, professional response that:
 1. Acknowledges the stock information has been gathered
 2. Confirms the completion of their request
@@ -41,7 +43,7 @@ Keep the response to one clear, engaging sentence that encourages further dialog
 Make sure to say something. DO NOT return empty response.
 """
 
-supervisor_prompt_template = ChatPromptTemplate.from_messages(
+supervisor_prompt_template: Final[ChatPromptTemplate] = ChatPromptTemplate.from_messages(
     [
         ("system", PROMPT),
         MessagesPlaceholder(variable_name="messages"),

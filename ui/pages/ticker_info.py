@@ -1,10 +1,10 @@
 import streamlit as st
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-# TODO: fix this impORT DELIMMA
-from src.graph.boss_state import StockBossState
-from src.main import invoke_agent
-from utils.st_callable_util import get_streamlit_cb
+from ui.utils.prompt import SYSTEM_PROMPT
+from ui.utils.st_callable_util import get_streamlit_cb
+from ventureai.graph.boss_state import StockBossState
+from ventureai.main import invoke_agent
 
 st.title("VentureAI")
 st.text("Explore Stocks and Tickers")
@@ -12,7 +12,7 @@ st.text("Explore Stocks and Tickers")
 prompt = st.chat_input()
 
 initial_state: StockBossState = {
-    "messages": [AIMessage("Hey! How can I help you today?")],
+    "messages": [SystemMessage(SYSTEM_PROMPT), AIMessage("Hey! I am VentureAI. How can I help you today?")],
     "ticker": None,
     "stock_data": None,
     "stock_summary": None,
@@ -20,12 +20,12 @@ initial_state: StockBossState = {
 }
 
 if "state" not in st.session_state:
-    st.session_state["state"] = initial_state
+    st.session_state.state = initial_state
 
 for msg in st.session_state.state["messages"]:
-    if isinstance(msg, AIMessage):
+    if msg.type == "ai":
         st.chat_message("assistant").write(msg.content)
-    elif isinstance(msg, HumanMessage):
+    elif msg.type == "human":
         st.chat_message("user").write(msg.content)
 
 if prompt:
@@ -33,7 +33,10 @@ if prompt:
     st.chat_message("user").write(prompt)
 
     with st.chat_message("assistant"):
-        # create a new placeholder for streaming messages and other events, and give it context
-        st_callback = get_streamlit_cb(st.container())
+        st_callback = get_streamlit_cb(st.empty())
         response = invoke_agent(st.session_state.state, [st_callback])
+        not_yet_messages = [msg for msg in response["messages"] if msg not in st.session_state.state["messages"]]
         st.session_state.state.update(response)
+
+    for msg in not_yet_messages:
+        st.chat_message(msg.type).write(msg.content)

@@ -3,14 +3,27 @@ name = "ventureai"
 version = "0.1.0"
 description = "Next Gen AI Agent for Stock Market Analysis and Guidance"
 readme = "README.md"
+authors = [{ name = "Harsh Narayan Jha", email = "harshnj@proton.me" }]
+license = "LICENSE"
+keywords = ["finance", "stock market", "investment", "AI", "agent"]
 requires-python = ">=3.13"
 dependencies = [
+    "langchain-community>=0.3.25",
     "langchain-ollama>=0.3.3",
     "langchain[google-genai]>=0.3.25",
     "langgraph>=0.4.8",
     "streamlit>=1.45.1",
     "yfinance>=0.2.61",
 ]
+
+[tool.ruff]
+src = ["ventuareai"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["ventureai", "agents", "constants", "graph", "models", "prompts", "tools"]
+
+[tool.setuptools.packages.find]
+where = ["ventureai"]
 
 [tool.basedpyright]
 reportUnusedCallResult = "none"
@@ -21,3 +34,8 @@ reportUnknownParameterType = "none"
 reportMissingTypeArgument = "none"
 reportAny = "none"
 useLibraryCodeForTypes = true
+
+[dependency-groups]
+dev = [
+    "langgraph-cli[inmem]>=0.3.3",
+]

@@ -1,0 +1,7 @@
+{
+  "dependencies": ["./ventureai"],
+  "graphs": {
+    "boss": "./ventureai/agents/boss.py:boss"
+  },
+  "env": ".env"
+}

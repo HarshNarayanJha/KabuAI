@@ -108,7 +108,7 @@ def boss_node(state: StockBossState) -> Command:
     )
 
 
-def call_stock_agent(state: StockBossState):
+def call_stock_agent(state: StockBossState) -> dict:
     if DEBUG:
         print("ENTERING Stock Agent Handler with state:")
         pprint(state)

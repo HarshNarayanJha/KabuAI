@@ -1,6 +1,8 @@
+from typing import Final
+
 from langchain_core.prompts import PromptTemplate
 
-fetch_prompt = """
+fetch_prompt: Final[str] = """
 You are a helpful assistant that can extract stock ticker symbols or comapny names from user queries.
 Analyze the user's message and extract either a stock ticker symbol (e.g., AAPL, TSLA) or a company name (e.g., Apple, Tesla) that the user is asking about.
 
@@ -23,7 +25,7 @@ Examples:
   Assistant:
 """
 
-summary_prompt = PromptTemplate.from_template("""
+summary_prompt: Final[PromptTemplate] = PromptTemplate.from_template("""
 You are a professional Stock and Company Data Summarizer. Your only purpose is to convert raw stock data into clear, factual summaries.
 
 You are not allowed to:

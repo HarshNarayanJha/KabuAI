@@ -30,7 +30,7 @@ class StockDetailsResponseFormat(BaseModel):
     ticker_or_name: str | None = Field(description="Ticker symbol of the stock or the company name.")
 
 
-def stock_details_node(state: StockAgentState):
+def stock_details_node(state: StockAgentState) -> dict:
     """
     Process stock details request.
     """
@@ -76,7 +76,7 @@ def stock_details_node(state: StockAgentState):
     }
 
 
-def stock_summary_node(state: StockAgentState):
+def stock_summary_node(state: StockAgentState) -> dict:
     """
     Summarize stock data.
     """
