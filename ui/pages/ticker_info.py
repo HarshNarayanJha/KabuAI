@@ -38,5 +38,5 @@ if prompt:
         not_yet_messages = [msg for msg in response["messages"] if msg not in st.session_state.state["messages"]]
         st.session_state.state.update(response)
 
-    for msg in not_yet_messages:
-        st.chat_message(msg.type).write(msg.content)
+        for msg in not_yet_messages:
+            st.write(msg.content)

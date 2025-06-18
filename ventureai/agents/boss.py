@@ -38,7 +38,7 @@ class Router(BaseModel):
         description="Agent to route to next. If no agents needed, route to FINISH."
     )
     message: str = Field(..., description="Message to the user.")
-    system_instruction: str = Field(..., description="Brief system instruction to the agent")
+    system_instruction: str = Field(..., description="Very Brief system instruction to the agent")
 
 
 def boss_node(state: StockBossState) -> Command:
@@ -86,7 +86,11 @@ def boss_node(state: StockBossState) -> Command:
     response = cast(Router, llm_heavy.with_structured_output(Router).invoke(messages))
     goto = response.next
     if goto == "FINISH":
-        return Command(goto=END, update={"next": END, "messages": [AIMessage(response.message, name=SUPERVISOR_NAME)]})
+        finishing_update: dict = {"next": END}
+        if response.message:
+            finishing_update["messages"] = [AIMessage(response.message, name=SUPERVISOR_NAME)]
+
+        return Command(goto=END, update=finishing_update)
 
     if DEBUG:
         print(f"GOING TO {goto}... {response}")
@@ -103,7 +107,9 @@ def boss_node(state: StockBossState) -> Command:
                     ]
                 },
             ),
-            "messages": [AIMessage(response.message, name=SUPERVISOR_NAME)],
+            # disable this message since it serves no purpose
+            # as it display after everything is done
+            # "messages": [AIMessage(response.message, name=SUPERVISOR_NAME)],
         },
     )
 
