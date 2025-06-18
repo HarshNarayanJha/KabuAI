@@ -34,7 +34,7 @@ OPTIONS = MEMBERS + ["FINISH"]
 
 # remember to keep updating this
 class Router(BaseModel):
-    next: Literal["stock_agent", "supervisor", "FINISH"] = Field(
+    next: Literal["stock_agent", "FINISH"] = Field(
         description="Agent to route to next. If no agents needed, route to FINISH."
     )
     message: str = Field(..., description="Message to the user.")
@@ -165,8 +165,9 @@ boss = (
     .compile(debug=DEBUG)
 )
 
-with open("boss_graph.png", "wb") as fp:
-    fp.write(boss.get_graph(xray=1).draw_mermaid_png())
+if DEBUG:
+    with open("boss_graph.png", "wb") as fp:
+        fp.write(boss.get_graph(xray=1).draw_mermaid_png())
 
 if __name__ == "__main__":
     state: StockBossState = {"messages": [], "stock_data": None, "stock_summary": None, "ticker": None, "next": ""}
