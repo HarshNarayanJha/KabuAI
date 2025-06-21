@@ -1,13 +1,18 @@
 from typing import Any, Literal
 
-from langchain_core.messages import AnyMessage
 from pydantic import BaseModel, Field
 
 from models.stock import StockData
 
 
+class Message(BaseModel):
+    type: Literal["ai", "human", "system", "tool"]
+    content: str
+    name: str = Field(default="")
+
+
 class APIState(BaseModel):
-    messages: list[AnyMessage] = Field(default=[])
+    messages: list[Message] = Field(default=[])
     ticker: str | None = Field(default=None)
     stock_data: StockData | None = Field(default=None)
     stock_summary: str | None = Field(default=None)
@@ -27,4 +32,4 @@ class Response(BaseModel):
     # type = "chunk"
     content: str | None = Field(default=None)
     # type = "update"
-    state: dict[str, Any] | None = Field(default=None)
+    state: APIState | None = Field(default=None)

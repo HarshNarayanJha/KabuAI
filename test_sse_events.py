@@ -25,7 +25,7 @@ def test_chat():
     data = {
         "state": {
             "messages": [
-                {"type": "human", "content": "Latest price for Apple"},
+                {"type": "human", "content": "Hey!"},
             ],
             "ticker": None,
             "stock_data": None,

@@ -42,7 +42,7 @@ async def chat(request: Request) -> StreamingResponse:
         "stock_data": request.state.stock_data or None,
         "stock_summary": request.state.stock_summary or None,
         "ticker": request.state.ticker or None,
-        "next": "",
+        "next": request.state.next,
     }
 
     async def stream_generator():
@@ -51,6 +51,7 @@ async def chat(request: Request) -> StreamingResponse:
         # updates -> for tool calls and state updates
         #
         async for mode, data in boss.astream(state, stream_mode=["messages", "updates"], subgraphs=False):
+            # print(mode, data)
             if mode == "messages":
                 token, metadata = cast(tuple[AnyMessage, dict[str, Any]], data)
                 node_name = metadata["langgraph_node"]
@@ -78,7 +79,7 @@ async def chat(request: Request) -> StreamingResponse:
                             )
                         )
 
-                elif isinstance(token, BaseMessageChunk):
+                elif token.content:
                     # message chunk
                     yield sse_format(
                         Response(
@@ -108,6 +109,8 @@ async def chat(request: Request) -> StreamingResponse:
                             else:
                                 updated_messages.append(msg)
 
+                        updated_state["messages"] = updated_messages
+
                     yield sse_format(
                         Response(
                             type="update",
@@ -128,6 +131,8 @@ async def chat(request: Request) -> StreamingResponse:
                                 updated_messages.append({"type": msg.type, "content": msg.content, "name": msg.name})
                             else:
                                 updated_messages.append(msg)
+
+                        updated_state["messages"] = updated_messages
 
                     yield sse_format(
                         Response(
