@@ -8,22 +8,18 @@ license = "LICENSE"
 keywords = ["finance", "stock market", "investment", "AI", "agent"]
 requires-python = ">=3.13"
 dependencies = [
+    "fastapi>=0.115.13",
     "langchain-community>=0.3.25",
     "langchain-ollama>=0.3.3",
     "langchain[google-genai]>=0.3.25",
     "langgraph>=0.4.8",
+    "requests-sse>=0.5.2",
     "streamlit>=1.45.1",
     "yfinance>=0.2.61",
 ]
 
-[tool.ruff]
-src = ["ventuareai"]
-
 [tool.ruff.lint.isort]
 known-first-party = ["ventureai", "agents", "constants", "graph", "models", "prompts", "tools"]
-
-[tool.setuptools.packages.find]
-where = ["ventureai"]
 
 [tool.basedpyright]
 reportUnusedCallResult = "none"
@@ -34,6 +30,10 @@ reportUnknownParameterType = "none"
 reportMissingTypeArgument = "none"
 reportAny = "none"
 useLibraryCodeForTypes = true
+executionEnvironments = [
+    { root = "ventureai" },
+    { root = "ui"}
+]
 
 [dependency-groups]
 dev = [
