@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 
-PYTHONPATH=$(pwd) uv run --env-file .env python ventureai/main.py
+cd ventureai
+uv run --env-file ../.env python main.py
