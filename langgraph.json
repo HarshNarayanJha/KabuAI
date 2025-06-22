@@ -1,7 +1,8 @@
 {
-  "dependencies": ["./ventureai"],
+  "dependencies": ["./kabuai"],
   "graphs": {
-    "boss": "./ventureai/agents/boss.py:boss"
+    "boss": "./kabuai/agents/boss.py:boss",
+    "stock": "./kabuai/agents/stock.py:stock_agent"
   },
   "env": ".env"
 }

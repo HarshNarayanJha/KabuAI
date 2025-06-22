@@ -655,6 +655,41 @@ wheels = [
 ]
 
 [[package]]
+name = "kabuai"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "fastapi" },
+    { name = "langchain", extra = ["google-genai"] },
+    { name = "langchain-community" },
+    { name = "langchain-ollama" },
+    { name = "langgraph" },
+    { name = "requests-sse" },
+    { name = "streamlit" },
+    { name = "yfinance" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "langgraph-cli", extra = ["inmem"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.115.13" },
+    { name = "langchain", extras = ["google-genai"], specifier = ">=0.3.25" },
+    { name = "langchain-community", specifier = ">=0.3.25" },
+    { name = "langchain-ollama", specifier = ">=0.3.3" },
+    { name = "langgraph", specifier = ">=0.4.8" },
+    { name = "requests-sse", specifier = ">=0.5.2" },
+    { name = "streamlit", specifier = ">=1.45.1" },
+    { name = "yfinance", specifier = ">=0.2.61" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "langgraph-cli", extras = ["inmem"], specifier = ">=0.3.3" }]
+
+[[package]]
 name = "langchain"
 version = "0.3.25"
 source = { registry = "https://pypi.org/simple" }
@@ -1751,41 +1786,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/de/ad/713be230bcda622ea
 wheels = [
     { url = "https://files.pythonhosted.org/packages/6d/0d/8adfeaa62945f90d19ddc461c55f4a50c258af7662d34b6a3d5d1f8646f6/uvicorn-0.34.3-py3-none-any.whl", hash = "sha256:16246631db62bdfbf069b0645177d6e8a77ba950cfedbfd093acef9444e4d885", size = 62431, upload-time = "2025-06-01T07:48:15.664Z" },
 ]
-
-[[package]]
-name = "ventureai"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "fastapi" },
-    { name = "langchain", extra = ["google-genai"] },
-    { name = "langchain-community" },
-    { name = "langchain-ollama" },
-    { name = "langgraph" },
-    { name = "requests-sse" },
-    { name = "streamlit" },
-    { name = "yfinance" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "langgraph-cli", extra = ["inmem"] },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "fastapi", specifier = ">=0.115.13" },
-    { name = "langchain", extras = ["google-genai"], specifier = ">=0.3.25" },
-    { name = "langchain-community", specifier = ">=0.3.25" },
-    { name = "langchain-ollama", specifier = ">=0.3.3" },
-    { name = "langgraph", specifier = ">=0.4.8" },
-    { name = "requests-sse", specifier = ">=0.5.2" },
-    { name = "streamlit", specifier = ">=1.45.1" },
-    { name = "yfinance", specifier = ">=0.2.61" },
-]
-
-[package.metadata.requires-dev]
-dev = [{ name = "langgraph-cli", extras = ["inmem"], specifier = ">=0.3.3" }]
 
 [[package]]
 name = "watchdog"

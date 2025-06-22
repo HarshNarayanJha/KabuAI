@@ -32,7 +32,6 @@ checkpointer = InMemorySaver()
 OPTIONS = MEMBERS + ["FINISH"]
 
 
-# remember to keep updating this
 class Router(BaseModel):
     next: Literal["stock_agent", "FINISH"] = Field(
         description="Agent to route to next. If no agents needed, route to FINISH."
@@ -65,7 +64,7 @@ def boss_node(state: StockBossState) -> Command:
                 ]
             )
 
-            supervisor_response = llm.invoke(prompt.invoke({"messages": state["messages"]}))
+            supervisor_response = llm_light.invoke(prompt.invoke({"messages": state["messages"]}))
 
             # completed
             return Command(
@@ -184,8 +183,10 @@ boss = (
 )
 
 if DEBUG:
-    with open("boss_graph.png", "wb") as fp:
+    with open("graph.png", "wb") as fp:
         fp.write(boss.get_graph(xray=1).draw_mermaid_png())
+    with open("boss_graph.png", "wb") as fp:
+        fp.write(boss.get_graph().draw_mermaid_png())
 
 if __name__ == "__main__":
     state: StockBossState = {"messages": [], "stock_data": None, "stock_summary": None, "ticker": None, "next": ""}

@@ -1,0 +1,6 @@
+Make 20 real world queries and test them
+
+add memory stores and explore chroma db
+use async if required
+
+NEXT, add tavily search for news and general details

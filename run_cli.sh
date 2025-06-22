@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 
-cd ventureai
+cd kabuai
 uv run --env-file ../.env python main.py

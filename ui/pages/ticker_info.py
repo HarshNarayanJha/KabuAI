@@ -12,7 +12,7 @@ from models.api import APIState, Message, Request, Response
 URL = "http://localhost:8000/chat"
 HEADERS = {"Content-Type": "application/json"}
 
-st.title("VentureAI")
+st.title("KabuAI")
 st.text("Explore Stocks and Tickers")
 
 
@@ -40,7 +40,7 @@ class ControlledSpinner:
 initial_state = APIState(
     messages=[
         Message(type="system", content=SYSTEM_PROMPT),
-        Message(type="ai", content="Hey! I am VentureAI. How can I help you today?", name=SUPERVISOR_NAME),
+        Message(type="ai", content="Hey! I am KabuAI. How can I help you today?", name=SUPERVISOR_NAME),
     ],
     ticker=None,
     stock_data=None,

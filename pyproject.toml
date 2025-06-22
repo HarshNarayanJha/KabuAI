@@ -1,11 +1,11 @@
 [project]
-name = "ventureai"
+name = "kabuai"
 version = "0.1.0"
-description = "Next Gen AI Agent for Stock Market Analysis and Guidance"
+description = "Next Gen AI Agent for Stock Market Analysis and Guidance. Smart Investing Conversations Start Here."
 readme = "README.md"
 authors = [{ name = "Harsh Narayan Jha", email = "harshnj@proton.me" }]
 license = "LICENSE"
-keywords = ["finance", "stock market", "investment", "AI", "agent"]
+keywords = ["finance", "stock market", "investment", "AI", "agent", "stock"]
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.115.13",
@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["ventureai", "agents", "constants", "graph", "models", "prompts", "tools"]
+known-first-party = ["kabuai", "agents", "constants", "graph", "models", "prompts", "tools"]
 
 [tool.basedpyright]
 reportUnusedCallResult = "none"
@@ -31,7 +31,7 @@ reportMissingTypeArgument = "none"
 reportAny = "none"
 useLibraryCodeForTypes = true
 executionEnvironments = [
-    { root = "ventureai" },
+    { root = "kabuai" },
     { root = "ui"}
 ]
 

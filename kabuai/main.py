@@ -32,7 +32,7 @@ def sse_format(payload: Response) -> str:
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to the VentureAI API!"}
+    return {"message": "Welcome to the KabuAI API!"}
 
 
 @app.post("/chat")
