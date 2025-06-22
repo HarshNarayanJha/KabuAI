@@ -61,7 +61,7 @@ def stock_details_node(state: StockAgentState) -> dict | Command:
             print("TickerResponse:", ticker_response.ticker_or_name)
 
         if not ticker_response.ticker_or_name:
-            return {"ticker": None, "stock_data": None, "stock_sumamry": None}
+            return {"ticker": None, "stock_data": None, "stock_summary": None}
 
         if state["ticker"] == ticker_response.ticker_or_name:
             # same ticker, we already have that data, no need to fetch
@@ -123,7 +123,7 @@ def stock_summary_node(state: StockAgentState) -> dict | Command:
             *state["messages"],
         ]
 
-        response = llm_heavy.invoke(messages)
+        response = llm.invoke(messages)
 
         if DEBUG:
             print(f"EXITING stock_summary NODE with response {response.content[:30]}...")
