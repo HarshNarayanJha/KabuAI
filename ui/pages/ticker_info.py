@@ -61,7 +61,9 @@ for msg in st.session_state.state.messages:
     elif msg.type == "human":
         st.chat_message("user").text(msg.content)
 
-if (prompt := st.chat_input("Type your message...")) and not st.session_state.awaiting_response:
+if (
+    prompt := st.chat_input("Type your message...", disabled=st.session_state.awaiting_response)
+) and not st.session_state.awaiting_response:
     st.session_state.awaiting_response = True
 
     st.session_state.state.messages.append(Message(type="human", content=prompt))
@@ -77,16 +79,12 @@ if (prompt := st.chat_input("Type your message...")) and not st.session_state.aw
         tool_spinner = ControlledSpinner("Calling tool...")
 
         message_placeholder = st.empty()
-
-        state = Request(state=st.session_state.state).model_dump()
-
         full_response = ""
-        last_chunk = ""
-        got_final_message = False
 
-        # print(f"Posting data to server: {state}")
+        print(f"Posting data to server: {st.session_state.state}")
+        state = Request(state=st.session_state.state).model_dump_json()
 
-        with EventSource(URL, method="POST", headers=HEADERS, json=state, timeout=5) as event_source:
+        with EventSource(URL, method="POST", headers=HEADERS, data=state, timeout=5) as event_source:
             try:
                 for event in event_source:
                     data = Response(**json.loads(event.data or ""))
@@ -121,14 +119,14 @@ if (prompt := st.chat_input("Type your message...")) and not st.session_state.aw
                             if data.state:
                                 if data.state.messages:
                                     for msg in data.state.messages:
-                                        if msg in st.session_state.state.messages:
-                                            continue
+                                        # use ids to prevent duplicates just in case
                                         st.session_state.state.messages.append(msg)
+                                        message_placeholder.empty()
+                                        st.text(msg.content.strip())
 
                                 if data.state.next:
                                     st.session_state.state.next = data.state.next
                                     if data.state.next == "__end__":
-                                        got_final_message = True
                                         break
 
                                 if data.state.ticker:
@@ -144,11 +142,9 @@ if (prompt := st.chat_input("Type your message...")) and not st.session_state.aw
                             handoff_spinner.stop()
                             tool_spinner.stop()
 
-                            if data.content and data.content != full_response:
-                                full_response += data.content or ""
+                            if data.content and data.content.strip():
+                                full_response += data.content.strip()
                                 message_placeholder.text(full_response + "| ")
-
-                message_placeholder.empty()
 
             except InvalidStatusCodeError as e:
                 st.error(f"Error: Invalid Status Code {e.status_code}")
@@ -162,8 +158,5 @@ if (prompt := st.chat_input("Type your message...")) and not st.session_state.aw
             finally:
                 handoff_spinner.stop()
                 tool_spinner.stop()
+                message_placeholder.empty()
                 st.session_state.awaiting_response = False
-
-        # TODO; Need to fix some stuff here
-
-        # message_placeholder.text(full_response)

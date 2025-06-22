@@ -20,12 +20,12 @@ from prompts.boss import DONE_PROMPT, supervisor_prompt_template
 CHAT_MODEL = os.getenv("CHAT_MODEL") or ""
 CHAT_MODEL_LIGHT = os.getenv("CHAT_MODEL_LIGHT") or ""
 CHAT_MODEL_HEAVY = os.getenv("CHAT_MODEL_HEAVY") or ""
+DEBUG = os.getenv("DEBUG", "0") == "1"
 
 llm = init_chat_model(model=CHAT_MODEL, temperature=0, max_tokens=2048)
 llm_light = init_chat_model(model=CHAT_MODEL_LIGHT, temperature=0, max_tokens=4096)
 llm_heavy = init_chat_model(model=CHAT_MODEL_HEAVY, temperature=0)
 
-DEBUG = False
 
 checkpointer = InMemorySaver()
 
@@ -54,64 +54,73 @@ def boss_node(state: StockBossState) -> Command:
             }
         )
 
-    # Let's check if we already have the summary
-    last_message = state["messages"][-1] if state["messages"] else None
-    if last_message and last_message.name == STOCK_AGENT_NAME and state["stock_summary"] and state["stock_data"]:
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", DONE_PROMPT),
-                MessagesPlaceholder(variable_name="messages"),
-            ]
-        )
-        supervisor_response = llm.invoke(prompt.invoke({"messages": state["messages"]}))
+    try:
+        # Let's check if we already have the summary
+        last_message = state["messages"][-1] if state["messages"] else None
+        if last_message and last_message.name == STOCK_AGENT_NAME and state["stock_summary"] and state["stock_data"]:
+            prompt = ChatPromptTemplate.from_messages(
+                [
+                    ("system", DONE_PROMPT),
+                    MessagesPlaceholder(variable_name="messages"),
+                ]
+            )
 
-        # completed
+            supervisor_response = llm.invoke(prompt.invoke({"messages": state["messages"]}))
+
+            # completed
+            return Command(
+                goto=END,
+                update={
+                    "next": END,
+                    "messages": [
+                        AIMessage(
+                            supervisor_response.content,
+                            name=SUPERVISOR_NAME,
+                        ),
+                    ],
+                },
+            )
+
+        messages = supervisor_prompt_template.invoke(
+            {"messages": state["messages"], "options": ", ".join(OPTIONS), "members": ", ".join(MEMBERS)}
+        )
+
+        response = cast(Router, llm.with_structured_output(Router).invoke(messages))
+
+        goto = response.next
+        if goto == "FINISH":
+            finishing_update: dict = {"next": END}
+            if response.message:
+                finishing_update["messages"] = [AIMessage(response.message, name=SUPERVISOR_NAME)]
+
+            return Command(goto=END, update=finishing_update)
+
+        if DEBUG:
+            print(f"GOING TO {goto}... {response}")
+
+        return Command(
+            goto=goto,
+            update={
+                "next": Send(
+                    goto,
+                    {
+                        "messages": [
+                            HumanMessage(state["messages"][-1].content),
+                            SystemMessage(response.system_instruction, name=SUPERVISOR_NAME),
+                        ]
+                    },
+                ),
+            },
+        )
+    except Exception as e:
+        error_msg = f"I encountered an error while fetching processing your query: {str(e)}"
         return Command(
             goto=END,
             update={
                 "next": END,
-                "messages": [
-                    AIMessage(
-                        supervisor_response.content,
-                        name=SUPERVISOR_NAME,
-                    ),
-                ],
+                "messages": [AIMessage(error_msg, name=SUPERVISOR_NAME)],
             },
         )
-
-    messages = supervisor_prompt_template.invoke(
-        {"messages": state["messages"], "options": ", ".join(OPTIONS), "members": ", ".join(MEMBERS)}
-    )
-
-    response = cast(Router, llm_heavy.with_structured_output(Router).invoke(messages))
-    goto = response.next
-    if goto == "FINISH":
-        finishing_update: dict = {"next": END}
-        if response.message:
-            finishing_update["messages"] = [AIMessage(response.message, name=SUPERVISOR_NAME)]
-
-        return Command(goto=END, update=finishing_update)
-
-    if DEBUG:
-        print(f"GOING TO {goto}... {response}")
-
-    return Command(
-        goto=goto,
-        update={
-            "next": Send(
-                goto,
-                {
-                    "messages": [
-                        HumanMessage(state["messages"][-1].content),
-                        SystemMessage(response.system_instruction, name=SUPERVISOR_NAME),
-                    ]
-                },
-            ),
-            # disable this message since it serves no purpose
-            # as it display after everything is done
-            # "messages": [AIMessage(response.message, name=SUPERVISOR_NAME)],
-        },
-    )
 
 
 def call_stock_agent(state: StockBossState) -> dict:
@@ -130,11 +139,13 @@ def call_stock_agent(state: StockBossState) -> dict:
 
         stock_result: StockAgentState = cast(StockAgentState, stock_agent.invoke(stock_state))
 
-        if stock_result.get("stock_data") is None or stock_result.get("stock_summary") is None:
+        summary = stock_result["stock_summary"]
+        if stock_result.get("stock_data") is None or summary is None:
             error_msg = "I couldn't find any stock data. Could you please provide a valid stock symbol or company name?"
-            return {**state, "next": SUPERVISOR_NAME, "messages": [AIMessage(error_msg, name=STOCK_AGENT_NAME)]}
-
-        summary = cast(str, stock_result["stock_summary"])
+            return {
+                "next": SUPERVISOR_NAME,
+                "messages": [AIMessage(error_msg, name=STOCK_AGENT_NAME)],
+            }
 
         return {
             "stock_data": stock_result["stock_data"],
@@ -143,6 +154,7 @@ def call_stock_agent(state: StockBossState) -> dict:
             "next": SUPERVISOR_NAME,
             "messages": [AIMessage(summary, name=STOCK_AGENT_NAME)],
         }
+
     except Exception as e:
         error_msg = f"I encountered an error while fetching stock information: {str(e)}"
         return {

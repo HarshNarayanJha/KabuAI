@@ -56,14 +56,15 @@ def fetch_stock_details(ticker_or_name: str) -> StockData | str:
     except HTTPError as e:
         if "404" not in str(e):
             raise
+
         try:
             data = search_stock(query=ticker_or_name)
         except Exception as e:
             print(f"Failed to fetch stock details. Error: {e}")
-            return "Failed to fetch stock details. Please try again"
+            raise
     except Exception as e:
         print(f"Failed to fetch stock details. Error: {e}")
-        return "Failed to fetch stock details. Please try again"
+        raise
 
     # --- Metadata ---
     info: dict[str, str] = data.info

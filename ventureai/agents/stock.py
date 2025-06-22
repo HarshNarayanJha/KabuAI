@@ -3,11 +3,12 @@ from pprint import pprint
 from typing import Literal, cast
 
 from langchain.chat_models import init_chat_model
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
+from langgraph.types import Command
 from pydantic import BaseModel, Field
 
-from constants.agents import STOCK_AGENT_NAME
+from constants.agents import STOCK_AGENT_NAME, SUPERVISOR_NAME
 from graph.stock_state import StockAgentState
 from models.stock import StockData
 from prompts.stock import fetch_prompt, summary_prompt
@@ -17,20 +18,19 @@ CHAT_MODEL = os.getenv("CHAT_MODEL") or ""
 CHAT_MODEL_LIGHT = os.getenv("CHAT_MODEL_LIGHT") or ""
 CHAT_MODEL_HEAVY = os.getenv("CHAT_MODEL_HEAVY") or ""
 
+DEBUG = os.getenv("DEBUG", "0") == "1"
 SUMMARY_LENGTH: Literal["short", "medium", "long"] = "medium"
 
 llm = init_chat_model(model=CHAT_MODEL, temperature=0, max_tokens=2048)
 llm_light = init_chat_model(model=CHAT_MODEL_LIGHT, temperature=0, max_tokens=4096)
 llm_heavy = init_chat_model(model=CHAT_MODEL_HEAVY, temperature=0)
 
-DEBUG = False
-
 
 class StockDetailsResponseFormat(BaseModel):
     ticker_or_name: str | None = Field(description="Ticker symbol of the stock or the company name.")
 
 
-def stock_details_node(state: StockAgentState) -> dict:
+def stock_details_node(state: StockAgentState) -> dict | Command:
     """
     Process stock details request.
     """
@@ -46,37 +46,49 @@ def stock_details_node(state: StockAgentState) -> dict:
             }
         )
 
-    messages = [
-        SystemMessage(fetch_prompt),
-        *state["messages"],
-    ]
+    try:
+        messages = [
+            SystemMessage(fetch_prompt),
+            *state["messages"],
+        ]
 
-    ticker_response = cast(
-        StockDetailsResponseFormat, llm.with_structured_output(StockDetailsResponseFormat).invoke(messages)
-    )
+        ticker_response = cast(
+            StockDetailsResponseFormat,
+            llm.with_structured_output(StockDetailsResponseFormat).invoke(messages),
+        )
 
-    if DEBUG:
-        print("TickerResponse:", ticker_response.ticker_or_name)
+        if DEBUG:
+            print("TickerResponse:", ticker_response.ticker_or_name)
 
-    if not ticker_response.ticker_or_name:
-        return {"ticker": None, "stock_data": None, "stock_sumamry": None}
+        if not ticker_response.ticker_or_name:
+            return {"ticker": None, "stock_data": None, "stock_sumamry": None}
 
-    if state["ticker"] == ticker_response.ticker_or_name:
-        # same ticker, we already have that, no need to fetch
-        return {}
+        if state["ticker"] == ticker_response.ticker_or_name:
+            # same ticker, we already have that data, no need to fetch
+            return {}
 
-    response: StockData = fetch_stock_details.invoke(ticker_response.ticker_or_name)
+        response: StockData = fetch_stock_details.invoke(ticker_response.ticker_or_name)
 
-    if DEBUG:
-        print(f"EXITING stock_details NODE with response {response.metadata}...")
+        if DEBUG:
+            print(f"EXITING stock_details NODE with response {response.metadata}...")
 
-    return {
-        "ticker": response.metadata.symbol,
-        "stock_data": response,
-    }
+        return {
+            "ticker": response.metadata.symbol,
+            "stock_data": response,
+        }
+
+    except Exception as e:
+        err = f"I encountered an error while fetching stock details. {e}"
+        if DEBUG:
+            print(f"ERROR in stock_details NODE: {e}")
+        return Command(
+            goto=SUPERVISOR_NAME,
+            update={"messages": [AIMessage(content=err, name=STOCK_AGENT_NAME)]},
+            graph=Command.PARENT,
+        )
 
 
-def stock_summary_node(state: StockAgentState) -> dict:
+def stock_summary_node(state: StockAgentState) -> dict | Command:
     """
     Summarize stock data.
     """
@@ -92,30 +104,41 @@ def stock_summary_node(state: StockAgentState) -> dict:
             }
         )
 
-    ticker = state["ticker"]
-    stock_data = state["stock_data"]
-    if ticker is None:
-        return {"stock_summary": None}
+    try:
+        ticker = state["ticker"]
+        stock_data = state["stock_data"]
+        if ticker is None:
+            return {"stock_summary": None}
 
-    if stock_data is None:
-        return {"stock_summary": f"No stock data available for {state['ticker']}"}
+        if stock_data is None:
+            return {"stock_summary": f"No stock data available for {state['ticker']}"}
 
-    messages = [
-        SystemMessage(
-            summary_prompt.format(
-                summary_length=SUMMARY_LENGTH,
+        messages = [
+            SystemMessage(
+                summary_prompt.format(
+                    summary_length=SUMMARY_LENGTH,
+                ),
             ),
-        ),
-        SystemMessage(stock_data.model_dump_json()),
-        *state["messages"],
-    ]
+            SystemMessage(stock_data.model_dump_json()),
+            *state["messages"],
+        ]
 
-    response = llm.invoke(messages)
+        response = llm_heavy.invoke(messages)
 
-    if DEBUG:
-        print(f"EXITING stock_summary NODE with response {response.content[:30]}...")
+        if DEBUG:
+            print(f"EXITING stock_summary NODE with response {response.content[:30]}...")
 
-    return {"stock_summary": str(response.content)}
+        return {"stock_summary": str(response.content)}
+
+    except Exception as e:
+        if DEBUG:
+            print(f"ERROR in stock_summary NODE: {e}")
+        err = f"I'm sorry, but I encountered an error while generating the stock summary: {e}"
+        return Command(
+            goto=SUPERVISOR_NAME,
+            update={"messages": [AIMessage(content=err, name=STOCK_AGENT_NAME)]},
+            graph=Command.PARENT,
+        )
 
 
 stock_agent = (

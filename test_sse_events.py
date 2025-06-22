@@ -25,7 +25,7 @@ def test_chat():
     data = {
         "state": {
             "messages": [
-                {"type": "human", "content": "Hey!"},
+                {"type": "human", "content": "Hello, can you fetch me details for the company Walt Disney?"},
             ],
             "ticker": None,
             "stock_data": None,
@@ -48,6 +48,7 @@ def test_chat():
                     print(f"Arguments: {data.arguments}")
                 elif data.type == "chunk":
                     print("Stream Chunk".center(50, "="))
+                    print(f"Name: {data.name}")
                     print(f"Content: {data.content}")
                 elif data.type == "update":
                     print("State Update".center(50, "="))
@@ -56,6 +57,8 @@ def test_chat():
 
                     if data.state.get("next", None) == "__end__":
                         return
+                else:
+                    print(f"Unknown: {event, data}")
 
                 print("=" * 50)
                 print()
