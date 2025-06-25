@@ -12,8 +12,9 @@ from langgraph.types import Command, Send
 from pydantic import BaseModel, Field
 
 from agents.stock import stock_agent
-from constants.agents import MEMBERS, STOCK_AGENT_NAME, SUPERVISOR_NAME
+from constants.agents import MEMBERS, SEARCH_AGENT_NAME, STOCK_AGENT_NAME, SUPERVISOR_NAME
 from graph.boss_state import StockBossState
+from graph.search_state import SearchAgentState
 from graph.stock_state import StockAgentState
 from prompts.boss import DONE_PROMPT, supervisor_prompt_template
 
@@ -33,7 +34,7 @@ OPTIONS = MEMBERS + ["FINISH"]
 
 
 class Router(BaseModel):
-    next: Literal["stock_agent", "FINISH"] = Field(
+    next: Literal["stock_agent", "search_agent", "FINISH"] = Field(
         description="Agent to route to next. If no agents needed, route to FINISH."
     )
     message: str = Field(..., description="Message to the user.")
@@ -50,6 +51,8 @@ def boss_node(state: StockBossState) -> Command:
                 "stock_summary": f"{state['stock_summary'][:30]}..." if state["stock_summary"] else None,
                 "ticker": state["ticker"],
                 "next": state["next"],
+                "search_query": state["search_query"],
+                "search_results": len(state["search_results"]),
             }
         )
 
@@ -189,7 +192,16 @@ if DEBUG:
         fp.write(boss.get_graph().draw_mermaid_png())
 
 if __name__ == "__main__":
-    state: StockBossState = {"messages": [], "stock_data": None, "stock_summary": None, "ticker": None, "next": ""}
+    state: StockBossState = {
+        "messages": [],
+        "stock_data": None,
+        "stock_summary": None,
+        "ticker": None,
+        "next": "",
+        "search_query": None,
+        "search_results": [],
+        "search_summary": None,
+    }
 
     config: RunnableConfig = {"configurable": {"thread_id": "1"}}
 
@@ -202,6 +214,9 @@ if __name__ == "__main__":
                 "stock_summary": f"{state['stock_summary'][:30]}..." if state["stock_summary"] else None,
                 "ticker": state["ticker"],
                 "next": state["next"],
+                "search_query": state["search_query"],
+                "search_results": len(state["search_results"]),
+                "search_summary": f"{state['search_summary'][:30]}..." if state["search_summary"] else None,
             }
         )
         print("\n\n========")
