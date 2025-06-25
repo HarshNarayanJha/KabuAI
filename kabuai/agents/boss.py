@@ -11,6 +11,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.types import Command, Send
 from pydantic import BaseModel, Field
 
+from agents.search import search_agent
 from agents.stock import stock_agent
 from constants.agents import MEMBERS, SEARCH_AGENT_NAME, STOCK_AGENT_NAME, SUPERVISOR_NAME
 from graph.boss_state import StockBossState
@@ -37,8 +38,8 @@ class Router(BaseModel):
     next: Literal["stock_agent", "search_agent", "FINISH"] = Field(
         description="Agent to route to next. If no agents needed, route to FINISH."
     )
-    message: str = Field(..., description="Message to the user.")
-    system_instruction: str = Field(..., description="Very Brief system instruction to the agent")
+    message: str = Field(..., description="Response Message to the user.")
+    system_instruction: str = Field(..., description="Very Brief system instruction to the agent you are routing to.")
 
 
 def boss_node(state: StockBossState) -> Command:
@@ -58,8 +59,19 @@ def boss_node(state: StockBossState) -> Command:
 
     try:
         # Let's check if we already have the summary
+        # In the final version we will check for the final verdict
         last_message = state["messages"][-1] if state["messages"] else None
-        if last_message and last_message.name == STOCK_AGENT_NAME and state["stock_summary"] and state["stock_data"]:
+        if (
+            last_message
+            # last message is from an agent
+            and last_message.type == "ai"
+            and last_message.name in MEMBERS
+            and (
+                # any of the state vars from any agent is there
+                (state["stock_summary"] and state["stock_data"])
+                or (state["search_results"] and state["search_summary"])
+            )
+        ):
             prompt = ChatPromptTemplate.from_messages(
                 [
                     ("system", DONE_PROMPT),
@@ -67,7 +79,7 @@ def boss_node(state: StockBossState) -> Command:
                 ]
             )
 
-            supervisor_response = llm_light.invoke(prompt.invoke({"messages": state["messages"]}))
+            supervisor_response = llm.invoke(prompt.invoke({"messages": state["messages"]}))
 
             # completed
             return Command(
@@ -88,6 +100,18 @@ def boss_node(state: StockBossState) -> Command:
         )
 
         response = cast(Router, llm.with_structured_output(Router).invoke(messages))
+
+        if DEBUG:
+            print(f"Got router response {response}")
+
+        if not response or not response.next:
+            return Command(
+                goto=END,
+                update={
+                    "next": END,
+                    "messages": [AIMessage("I have encountered an error. Please try again.", name=SUPERVISOR_NAME)],
+                },
+            )
 
         goto = response.next
         if goto == "FINISH":
@@ -115,7 +139,10 @@ def boss_node(state: StockBossState) -> Command:
             },
         )
     except Exception as e:
-        error_msg = f"I encountered an error while fetching processing your query: {str(e)}"
+        error_msg = "I encountered an error while processing your query"
+        if DEBUG:
+            print(error_msg + str(e))
+
         return Command(
             goto=END,
             update={
@@ -126,9 +153,9 @@ def boss_node(state: StockBossState) -> Command:
 
 
 def call_stock_agent(state: StockBossState) -> dict:
-    if DEBUG:
-        print("ENTERING Stock Agent Handler with state:")
-        pprint(state)
+    # if DEBUG:
+    # print("ENTERING Stock Agent Handler with state:")
+    # pprint(state)
 
     try:
         send: Send = cast(Send, state["next"])
@@ -158,10 +185,56 @@ def call_stock_agent(state: StockBossState) -> dict:
         }
 
     except Exception as e:
-        error_msg = f"I encountered an error while fetching stock information: {str(e)}"
+        error_msg = "I encountered an error while fetching stock information"
+        if DEBUG:
+            print(error_msg + str(e))
+
         return {
             "next": SUPERVISOR_NAME,
             "messages": [AIMessage(error_msg, name=STOCK_AGENT_NAME)],
+        }
+
+
+def call_search_agent(state: StockBossState) -> dict:
+    # if DEBUG:
+    # print("ENTERING Search Agent Handler with state:")
+    # pprint(state)
+
+    try:
+        send: Send = cast(Send, state["next"])
+        search_state = {
+            "ticker": state["ticker"],
+            "stock_summary": state["stock_summary"],
+            "messages": send.arg["messages"],
+        }
+
+        search_result: SearchAgentState = cast(SearchAgentState, search_agent.invoke(search_state))
+
+        results = search_result["search_results"]
+        summary = search_result["search_summary"]
+        if search_result.get("search_query") is None or not results or not summary:
+            error_msg = "I couldn't find any search results. Could you ask something more specific?"
+            return {
+                "next": SUPERVISOR_NAME,
+                "messages": [AIMessage(error_msg, name=SEARCH_AGENT_NAME)],
+            }
+
+        return {
+            "next": SUPERVISOR_NAME,
+            "search_query": search_result["search_query"],
+            "search_results": results,
+            "search_summary": summary,
+            "messages": [AIMessage(summary, name=SEARCH_AGENT_NAME)],
+        }
+
+    except Exception as e:
+        error_msg = "I encountered an error while fetching search information"
+        if DEBUG:
+            print(error_msg + str(e))
+
+        return {
+            "next": SUPERVISOR_NAME,
+            "messages": [AIMessage(error_msg, name=SEARCH_AGENT_NAME)],
         }
 
 
@@ -177,9 +250,15 @@ boss = (
         call_stock_agent,
         destinations=(SUPERVISOR_NAME,),
     )
+    .add_node(
+        SEARCH_AGENT_NAME,
+        call_search_agent,
+        destinations=(SUPERVISOR_NAME,),
+    )
     #
     .set_entry_point(SUPERVISOR_NAME)
     .add_edge(STOCK_AGENT_NAME, SUPERVISOR_NAME)
+    .add_edge(SEARCH_AGENT_NAME, SUPERVISOR_NAME)
     # end would be the final verdict agent
     .set_finish_point(SUPERVISOR_NAME)
     .compile(debug=DEBUG)
