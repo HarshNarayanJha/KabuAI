@@ -78,12 +78,12 @@ def stock_details_node(state: StockAgentState) -> dict | Command:
         }
 
     except Exception as e:
-        err = f"I encountered an error while fetching stock details. {e}"
+        err = "I encountered an error while fetching stock details"
         if DEBUG:
             print(f"ERROR in stock_details NODE: {e}")
         return Command(
             goto=SUPERVISOR_NAME,
-            update={"messages": [AIMessage(content=err, name=STOCK_AGENT_NAME)]},
+            update={"messages": [AIMessage(content=err, name=STOCK_AGENT_NAME)], "stock_data": None},
             graph=Command.PARENT,
         )
 
@@ -133,10 +133,10 @@ def stock_summary_node(state: StockAgentState) -> dict | Command:
     except Exception as e:
         if DEBUG:
             print(f"ERROR in stock_summary NODE: {e}")
-        err = f"I'm sorry, but I encountered an error while generating the stock summary: {e}"
+        err = "I'm sorry, but I encountered an error while generating the stock summary"
         return Command(
             goto=SUPERVISOR_NAME,
-            update={"messages": [AIMessage(content=err, name=STOCK_AGENT_NAME)]},
+            update={"messages": [AIMessage(content=err, name=STOCK_AGENT_NAME)], "stock_summary": None},
             graph=Command.PARENT,
         )
 

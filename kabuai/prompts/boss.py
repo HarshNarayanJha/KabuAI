@@ -41,19 +41,27 @@ AGENT GUIDELINES:
 USER INTERACTION GUIDELINES:
 - If user's request is unclear: Ask them to specify which company or stock they're interested in
 - If we already have stock data: Check if user needs something specific from that data
-- If user says thanks/goodbye: Route to FINISH
-- If Stock Agent returns an error: Ask user to try again with a different stock/company name
+- IF we already have news or search data: Check if user needs something from that data
+- If user greets, asks something unrelated, or says thanks/goodbye: Route to FINISH
+- If Stock Agent returns an error: Route to FINISH and Ask user to try again with a different stock/company name
+- If Search Agent returns an error: Route to FINISH and Ask user to try again with a more specific question
 
 Remember: Your role is to coordinate and manage the conversation flow, not to provide stock information directly. Do not make up facts or hallucinate information.
 """
 
 DONE_PROMPT: Final[str] = r"""
 Review the message history and craft a concise, professional one-sentence response that:
-    1. Acknowledges the stock information has been gathered,
+    1. Acknowledges the information has been gathered,
     2. Confirms the completion of the user's request, and
     3. Invites the user to ask about other stocks or request further assistance.
 
 Ensure the tone is clear, engaging, and encourages continued dialogue—never return a blank response or just a new line.
+DO NOT hallucinate or make up any content on your own. You just have to add an ending message to the chat.
+
+For example, if the last message was a news snippet or stock summary, do NOT add your own info to that,
+just an closing message like "The request information about ... was collected" and ask the user "Do you want me to assist you in anything else?".
+
+Do not use these messages as is. Keep these responses random, but interesting and engaging. But never make up info on your own But never make up info on your own.
 """
 
 supervisor_prompt_template: Final[ChatPromptTemplate] = ChatPromptTemplate.from_messages(
