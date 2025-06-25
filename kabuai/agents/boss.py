@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from pprint import pprint
 from typing import Literal, cast
 
@@ -96,7 +97,12 @@ def boss_node(state: StockBossState) -> Command:
             )
 
         messages = supervisor_prompt_template.invoke(
-            {"messages": state["messages"], "options": ", ".join(OPTIONS), "members": ", ".join(MEMBERS)}
+            {
+                "messages": state["messages"],
+                "options": ", ".join(OPTIONS),
+                "members": ", ".join(MEMBERS),
+                "today": datetime.today().isoformat(),
+            }
         )
 
         response = cast(Router, llm.with_structured_output(Router).invoke(messages))

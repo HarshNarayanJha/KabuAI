@@ -38,6 +38,7 @@ class ControlledSpinner:
 
 
 initial_state = APIState(
+    next="",
     messages=[
         Message(type="system", content=SYSTEM_PROMPT),
         Message(type="ai", content="Hey! I am KabuAI. How can I help you today?", name=SUPERVISOR_NAME),
@@ -45,7 +46,9 @@ initial_state = APIState(
     ticker=None,
     stock_data=None,
     stock_summary=None,
-    next="",
+    search_query=None,
+    search_results=[],
+    search_summary=None,
 )
 
 if "state" not in st.session_state:
@@ -129,14 +132,23 @@ if (
                                     if data.state.next == "__end__":
                                         break
 
-                                if data.state.ticker:
+                                if data.state.ticker is not None:
                                     st.session_state.state.ticker = data.state.ticker
 
-                                if data.state.stock_data:
+                                if data.state.stock_data is not None:
                                     st.session_state.state.stock_data = data.state.stock_data
 
-                                if data.state.stock_summary:
+                                if data.state.stock_summary is not None:
                                     st.session_state.state.stock_summary = data.state.stock_summary
+
+                                if data.state.search_query is not None:
+                                    st.session_state.state.search_query = data.state.search_query
+
+                                if data.state.search_results:
+                                    st.session_state.state.search_results = data.state.search_results
+
+                                if data.state.search_summary is not None:
+                                    st.session_state.state.search_summary = data.state.search_summary
 
                         case "chunk":
                             handoff_spinner.stop()

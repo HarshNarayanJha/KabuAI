@@ -3,15 +3,21 @@ from typing import Any, Literal
 from langchain_core.messages import AnyMessage
 from pydantic import BaseModel, Field
 
+from models.search import SearchResult
 from models.stock import StockData
 
 
 class APIState(BaseModel):
+    next: str = Field(default="")
     messages: list[AnyMessage] = Field(default=[])
+    # stock agent
     ticker: str | None = Field(default=None)
     stock_data: StockData | None = Field(default=None)
     stock_summary: str | None = Field(default=None)
-    next: str = Field(default="")
+    # search agent
+    search_query: str | None = Field(default=None)
+    search_results: list[SearchResult] = Field(default=[])
+    search_summary: str | None = Field(default=None)
 
 
 class Request(BaseModel):

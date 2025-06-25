@@ -46,6 +46,9 @@ USER INTERACTION GUIDELINES:
 - If Stock Agent returns an error: Route to FINISH and Ask user to try again with a different stock/company name
 - If Search Agent returns an error: Route to FINISH and Ask user to try again with a more specific question
 
+GENERAL INFO:
+ - Today's date is {today}
+
 Remember: Your role is to coordinate and manage the conversation flow, not to provide stock information directly. Do not make up facts or hallucinate information.
 """
 
