@@ -1,6 +1,8 @@
 import json
+import re
 from collections.abc import Iterator
 
+import humanize
 import requests
 import streamlit as st
 from requests_sse import EventSource, InvalidContentTypeError, InvalidStatusCodeError
@@ -11,6 +13,18 @@ from models.api import APIState, Message, Request, Response
 
 URL = "http://localhost:8000/chat"
 HEADERS = {"Content-Type": "application/json"}
+
+MARKET_CAP_KEY = "mc-key"
+
+st.html(
+    f"""
+    <style>
+    div.st-key-{MARKET_CAP_KEY} [data-testid="stMetricDelta"] svg {{
+        display: none;
+    }}
+    </style>
+    """
+)
 
 st.title("KabuAI")
 st.text("Explore Stocks and Tickers")
@@ -37,6 +51,10 @@ class ControlledSpinner:
         self.text = text
 
 
+def escape_markdown(text: str) -> str:
+    return re.sub(r"(?<!\\)\$", r"\\$", text)
+
+
 initial_state = APIState(
     next="",
     messages=[
@@ -60,9 +78,9 @@ if "awaiting_response" not in st.session_state:
 # Existing messages
 for msg in st.session_state.state.messages:
     if msg.type == "ai":
-        st.chat_message("assistant").text(msg.content)
+        st.chat_message("assistant").markdown(escape_markdown(msg.content))
     elif msg.type == "human":
-        st.chat_message("user").text(msg.content)
+        st.chat_message("user").markdown(escape_markdown(msg.content))
 
 if (
     prompt := st.chat_input("Type your message...", disabled=st.session_state.awaiting_response)
@@ -72,7 +90,7 @@ if (
     st.session_state.state.messages.append(Message(type="human", content=prompt))
 
     with st.chat_message("user"):
-        st.text(prompt)
+        st.markdown(escape_markdown(prompt))
 
     with st.chat_message("assistant"):
         handoff_section = st.empty()
@@ -80,6 +98,9 @@ if (
 
         handoff_spinner = ControlledSpinner("Calling agent...")
         tool_spinner = ControlledSpinner("Calling tool...")
+
+        stock_placeholder = st.empty()
+        sources_placeholder = st.empty()
 
         message_placeholder = st.empty()
         full_response = ""
@@ -125,7 +146,7 @@ if (
                                         # use ids to prevent duplicates just in case
                                         st.session_state.state.messages.append(msg)
                                         message_placeholder.empty()
-                                        st.text(msg.content.strip())
+                                        st.markdown(escape_markdown(msg.content.strip()))
 
                                 if data.state.next:
                                     st.session_state.state.next = data.state.next
@@ -137,6 +158,31 @@ if (
 
                                 if data.state.stock_data is not None:
                                     st.session_state.state.stock_data = data.state.stock_data
+                                    if data.state.stock_data.prices:
+                                        with stock_placeholder:
+                                            col1, col2 = st.columns(2)
+
+                                            _label = f"**{data.state.stock_data.metadata.symbol} _{data.state.stock_data.company.longName}_**"
+                                            _latest_price = f"${data.state.stock_data.prices[-1].close:.2f}"
+                                            _delta = f"{
+                                                (
+                                                    data.state.stock_data.prices[-1].close
+                                                    - data.state.stock_data.prices[-1].open
+                                                ):.2f}"
+
+                                            with col1:
+                                                st.text("")
+                                                st.metric(_label, _latest_price, _delta)
+                                                st.text("")
+
+                                            _label = f"**{data.state.stock_data.metadata.symbol} _Market Capital_**"
+                                            _market_cap = f"${humanize.intword(data.state.stock_data.metadata.market_cap or 'N/A', format='%.3f').title()}"
+                                            _market_cap_full = f"${humanize.intcomma(data.state.stock_data.metadata.market_cap or 'N/A')}"
+
+                                            with col2.container(key=MARKET_CAP_KEY):
+                                                st.text("")
+                                                st.metric(_label, _market_cap, _market_cap_full, delta_color="off")
+                                                st.text("")
 
                                 if data.state.stock_summary is not None:
                                     st.session_state.state.stock_summary = data.state.stock_summary
@@ -146,6 +192,16 @@ if (
 
                                 if data.state.search_results:
                                     st.session_state.state.search_results = data.state.search_results
+                                    with sources_placeholder.expander("Sources", expanded=True, icon="📃"):
+                                        for res in data.state.search_results:
+                                            print(f"Rendering search results: {res.link}")
+                                            color = "blue"
+                                            if res.sentiment_score >= 0.25 and res.confidence >= 0.25:
+                                                color = "green"
+                                            elif res.sentiment_score <= -0.25 and res.confidence >= 0.25:
+                                                color = "orange"
+
+                                            st.badge(f"{res.source} ({res.link})", icon="🌐", color=color)
 
                                 if data.state.search_summary is not None:
                                     st.session_state.state.search_summary = data.state.search_summary

@@ -60,6 +60,7 @@ Review the message history and craft a concise, professional one-sentence respon
 
 Ensure the tone is clear, engaging, and encourages continued dialogue—never return a blank response or just a new line.
 DO NOT hallucinate or make up any content on your own. You just have to add an ending message to the chat.
+Remember, do not try to continue previous message by making up content yourself. For example, if the last message was a news list, do NOT make up another news item in your response.
 
 For example, if the last message was a news snippet or stock summary, do NOT add your own info to that,
 just an closing message like "The request information about ... was collected" and ask the user "Do you want me to assist you in anything else?".
@@ -76,7 +77,7 @@ supervisor_prompt_template: Final[ChatPromptTemplate] = ChatPromptTemplate.from_
             """
             Given the conversation above, who should act next? Or should we FINISH? Pick VERY Carefully! Select one of: {options}.
             Be sure to include a response message to the user.
-            This will be read by the end user, so don't include any thoughts or so, just an appropriate response message to user's query, while the agent does the work.
+            This will be read by the end user, so don't include your thoughts or made up information, just an appropriate response message to user's query, while the agent does the work.
             If not routing to FINISH, be sure to include a brief system prompt for the next agent to act upon.
             """,
         ),
