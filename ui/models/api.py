@@ -30,12 +30,14 @@ class Request(BaseModel):
 
 
 class Response(BaseModel):
-    type: Literal["handoff", "tool", "chunk", "update"]
+    type: Literal["handoff", "tool", "chunk", "update", "task"]
     # type = "handoff" | "tool"
     arguments: dict[str, Any] | None = Field(default=None)
-    # type = "tool"
+    # type = "tool" | "task"
     name: str | None = Field(default=None)
     # type = "chunk"
     content: str | None = Field(default=None)
     # type = "update"
     state: APIState | None = Field(default=None)
+    # type = "task"
+    direction: Literal["enter", "leave"] | None = Field(default=None)

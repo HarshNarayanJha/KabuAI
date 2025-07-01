@@ -34,14 +34,14 @@ def search_news_node(state: SearchAgentState) -> dict | Command:
     Searches the web based on the system instruction and user's query
     """
 
-    if DEBUG:
-        print("ENTERING search_news NODE with state:")
-        pprint(
-            {
-                **state,
-                "messages": [(message.type, message.content) for message in state["messages"]],
-            }
-        )
+    # if DEBUG:
+    #     print("ENTERING search_news NODE with state:")
+    #     pprint(
+    #         {
+    #             **state,
+    #             "messages": [(message.type, message.content) for message in state["messages"]],
+    #         }
+    #     )
 
     try:
         messages = [
@@ -71,16 +71,15 @@ def search_news_node(state: SearchAgentState) -> dict | Command:
 
         response = search_web(query_response.query)
 
-        if DEBUG:
-            print(f"EXITING search_news NODE with response {response}")
+        # if DEBUG:
+        #     print(f"EXITING search_news NODE with response {response}")
 
         # continue to sentiment node
         return {"search_query": query_response.query, "search_results": response}
 
     except Exception as e:
-        if DEBUG:
-            print(f"ERROR in search_news NODE: {e}")
         err = "I'm sorry, but I encountered an error while searching for news"
+        print(f"ERROR in search_news NODE: {e}")
         return Command(
             goto=SUPERVISOR_NAME,
             update={
@@ -102,14 +101,14 @@ def sentiment_news_node(state: SearchAgentState) -> dict | Command:
     Performs Sentiment Analysis on the search results
     """
 
-    if DEBUG:
-        print("ENTERING sentiment_news NODE with state:")
-        pprint(
-            {
-                **state,
-                "messages": [(message.type, message.content) for message in state["messages"]],
-            }
-        )
+    # if DEBUG:
+    #     print("ENTERING sentiment_news NODE with state:")
+    #     pprint(
+    #         {
+    #             **state,
+    #             "messages": [(message.type, message.content) for message in state["messages"]],
+    #         }
+    #     )
 
     try:
         if not state["search_results"]:
@@ -131,7 +130,8 @@ def sentiment_news_node(state: SearchAgentState) -> dict | Command:
             print(f"Asking for sentiment scores with messages: {messages}")
 
         response = cast(
-            SentimentResultsResponseFormat, llm.with_structured_output(SentimentResultsResponseFormat).invoke(messages)
+            SentimentResultsResponseFormat,
+            llm_light.with_structured_output(SentimentResultsResponseFormat).invoke(messages),
         )
 
         if DEBUG:
@@ -168,9 +168,8 @@ def sentiment_news_node(state: SearchAgentState) -> dict | Command:
         return {"search_results": updated_search_results}
 
     except Exception as e:
-        if DEBUG:
-            print(f"ERROR in sentiment_news NODE: {e}")
         err = "I'm sorry, but I encountered an error while analyzing sentiment"
+        print(f"ERROR in sentiment_news NODE: {e}")
         return Command(
             goto=SUPERVISOR_NAME,
             update={
@@ -185,14 +184,14 @@ def news_summary_node(state: SearchAgentState) -> dict | Command:
     Summarizes the search results to answer user's initial query.
     """
 
-    if DEBUG:
-        print("ENTERING news_summary NODE with state:")
-        pprint(
-            {
-                **state,
-                "messages": [(message.type, message.content) for message in state["messages"]],
-            }
-        )
+    # if DEBUG:
+    #     print("ENTERING news_summary NODE with state:")
+    #     pprint(
+    #         {
+    #             **state,
+    #             "messages": [(message.type, message.content) for message in state["messages"]],
+    #         }
+    #     )
 
     try:
         if not state["search_results"]:
@@ -232,9 +231,8 @@ def news_summary_node(state: SearchAgentState) -> dict | Command:
         return {"search_summary": response.content}
 
     except Exception as e:
-        if DEBUG:
-            print(f"ERROR in news_summary NODE: {e}")
         err = "I'm sorry, but I encountered an error while summarizing news"
+        print(f"ERROR in news_summary NODE: {e}")
         return Command(
             goto=SUPERVISOR_NAME,
             update={

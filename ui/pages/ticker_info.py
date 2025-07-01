@@ -14,20 +14,24 @@ from models.api import APIState, Message, Request, Response
 URL = "http://localhost:8000/chat"
 HEADERS = {"Content-Type": "application/json"}
 
-MARKET_CAP_KEY = "mc-key"
+# st.html(
+#     """
+#     <style>
+#     [data-testid="stMetricDelta"] svg {
+#         display: none;
+#     }
 
-st.html(
-    f"""
-    <style>
-    div.st-key-{MARKET_CAP_KEY} [data-testid="stMetricDelta"] svg {{
-        display: none;
-    }}
-    </style>
-    """
-)
+#     [data-testid="stMetricDelta"] > div:before {
+#         content: "◯";
+#         font-weight: bold;
+#     }
+
+#     </style>
+#     """
+# )
 
 st.title("KabuAI")
-st.text("Explore Stocks and Tickers")
+st.subheader("Explore Stocks and Tickers")
 
 
 class ControlledSpinner:
@@ -105,16 +109,15 @@ if (
         message_placeholder = st.empty()
         full_response = ""
 
-        print(f"Posting data to server: {st.session_state.state}")
+        # print(f"Posting data to server: {st.session_state.state}")
         state = Request(state=st.session_state.state).model_dump_json()
 
-        with EventSource(URL, method="POST", headers=HEADERS, data=state, timeout=5) as event_source:
+        with EventSource(URL, method="POST", headers=HEADERS, data=state, timeout=30) as event_source:
             try:
                 for event in event_source:
-                    data = Response(**json.loads(event.data or ""))
+                    data = Response(**json.loads(event.data or "{}"))
 
                     print(f"GOT DATA: {data}")
-
                     match data.type:
                         case "handoff":
                             if data.arguments is None:
@@ -124,7 +127,7 @@ if (
                                 continue
 
                             with handoff_section.expander("Delegating Task"):
-                                st.code(f"Asking {data.arguments.get('next')} for help", language=None)
+                                st.code(f"Asking {data.arguments.get('next', 'agent')} for help", language=None)
 
                             handoff_spinner.set_text(data.arguments.get("message", "Working..."))
                             handoff_spinner.start()
@@ -137,28 +140,34 @@ if (
                                 tool_spinner.start()
 
                         case "update":
-                            handoff_spinner.stop()
-                            tool_spinner.stop()
+                            # handoff_spinner.stop()
+                            # tool_spinner.stop()
 
                             if data.state:
                                 if data.state.messages:
                                     for msg in data.state.messages:
-                                        # use ids to prevent duplicates just in case
+                                        # TODO: use ids to prevent duplicates just in case
                                         st.session_state.state.messages.append(msg)
                                         message_placeholder.empty()
                                         st.markdown(escape_markdown(msg.content.strip()))
 
                                 if data.state.next:
+                                    handoff_spinner.stop()
                                     st.session_state.state.next = data.state.next
+                                    # essential to stop the SSE streaming, otherwise it will keep sending messages!
                                     if data.state.next == "__end__":
                                         break
 
                                 if data.state.ticker is not None:
                                     st.session_state.state.ticker = data.state.ticker
 
-                                if data.state.stock_data is not None:
+                                if (
+                                    data.state.stock_data is not None
+                                    and data.state.stock_data != st.session_state.state.stock_data
+                                ):
                                     st.session_state.state.stock_data = data.state.stock_data
                                     if data.state.stock_data.prices:
+                                        stock_placeholder.empty()
                                         with stock_placeholder:
                                             col1, col2 = st.columns(2)
 
@@ -179,7 +188,7 @@ if (
                                             _market_cap = f"${humanize.intword(data.state.stock_data.metadata.market_cap or 'N/A', format='%.3f').title()}"
                                             _market_cap_full = f"${humanize.intcomma(data.state.stock_data.metadata.market_cap or 'N/A')}"
 
-                                            with col2.container(key=MARKET_CAP_KEY):
+                                            with col2:
                                                 st.text("")
                                                 st.metric(_label, _market_cap, _market_cap_full, delta_color="off")
                                                 st.text("")
@@ -190,8 +199,12 @@ if (
                                 if data.state.search_query is not None:
                                     st.session_state.state.search_query = data.state.search_query
 
-                                if data.state.search_results:
+                                if (
+                                    data.state.search_results
+                                    and data.state.search_results != st.session_state.state.search_results
+                                ):
                                     st.session_state.state.search_results = data.state.search_results
+                                    sources_placeholder.empty()
                                     with sources_placeholder.expander("Sources", expanded=True, icon="📃"):
                                         for res in data.state.search_results:
                                             print(f"Rendering search results: {res.link}")
@@ -207,12 +220,17 @@ if (
                                     st.session_state.state.search_summary = data.state.search_summary
 
                         case "chunk":
-                            handoff_spinner.stop()
+                            # stop handoff spinner on state.next update instead
+                            # handoff_spinner.stop()
                             tool_spinner.stop()
 
                             if data.content and data.content.strip():
                                 full_response += data.content.strip()
-                                message_placeholder.text(full_response + "| ")
+                                message_placeholder.markdown(escape_markdown(full_response) + "| ")
+
+                        case "task":
+                            # Not of any use right now, will use
+                            print(f"Task update: {data.direction} -> {data.name}")
 
             except InvalidStatusCodeError as e:
                 st.error(f"Error: Invalid Status Code {e.status_code}")

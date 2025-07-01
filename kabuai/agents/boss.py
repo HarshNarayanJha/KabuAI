@@ -44,19 +44,19 @@ class Router(BaseModel):
 
 
 def boss_node(state: StockBossState) -> Command:
-    if DEBUG:
-        print("ENTERING Boss Node with state:")
-        pprint(
-            {
-                "messages": [message.content for message in state["messages"]],
-                "stock_data": f"{state['stock_data'].metadata}..." if state["stock_data"] else None,
-                "stock_summary": f"{state['stock_summary'][:30]}..." if state["stock_summary"] else None,
-                "ticker": state["ticker"],
-                "next": state["next"],
-                "search_query": state["search_query"],
-                "search_results": len(state["search_results"]),
-            }
-        )
+    # if DEBUG:
+    #     print("ENTERING Boss Node with state:")
+    #     pprint(
+    #         {
+    #             "messages": [message.content for message in state["messages"]],
+    #             "stock_data": f"{state['stock_data'].metadata}..." if state["stock_data"] else None,
+    #             "stock_summary": f"{state['stock_summary'][:30]}..." if state["stock_summary"] else None,
+    #             "ticker": state["ticker"],
+    #             "next": state["next"],
+    #             "search_query": state["search_query"],
+    #             "search_results": len(state["search_results"]),
+    #         }
+    #     )
 
     try:
         # Let's check if we already have the summary
@@ -80,7 +80,7 @@ def boss_node(state: StockBossState) -> Command:
                 ]
             )
 
-            supervisor_response = llm.invoke(prompt.invoke({"messages": state["messages"]}))
+            supervisor_response = llm_heavy.invoke(prompt.invoke({"messages": state["messages"]}))
 
             # completed
             return Command(
@@ -105,7 +105,7 @@ def boss_node(state: StockBossState) -> Command:
             }
         )
 
-        response = cast(Router, llm.with_structured_output(Router).invoke(messages))
+        response = cast(Router, llm_heavy.with_structured_output(Router).invoke(messages))
 
         if DEBUG:
             print(f"Got router response {response}")
@@ -146,8 +146,7 @@ def boss_node(state: StockBossState) -> Command:
         )
     except Exception as e:
         error_msg = "I encountered an error while processing your query"
-        if DEBUG:
-            print(error_msg + str(e))
+        print(error_msg + str(e))
 
         return Command(
             goto=END,
@@ -165,7 +164,7 @@ def call_stock_agent(state: StockBossState) -> dict:
 
     try:
         send: Send = cast(Send, state["next"])
-        stock_state = {
+        stock_state: StockAgentState = {
             "messages": send.arg["messages"],
             "stock_data": state["stock_data"],
             "stock_summary": state["stock_summary"],
@@ -208,10 +207,13 @@ def call_search_agent(state: StockBossState) -> dict:
 
     try:
         send: Send = cast(Send, state["next"])
-        search_state = {
+        search_state: SearchAgentState = {
             "ticker": state["ticker"],
             "stock_summary": state["stock_summary"],
             "messages": send.arg["messages"],
+            "search_query": state["search_query"],
+            "search_results": state["search_results"],
+            "search_summary": state["search_summary"],
         }
 
         search_result: SearchAgentState = cast(SearchAgentState, search_agent.invoke(search_state))
@@ -235,8 +237,7 @@ def call_search_agent(state: StockBossState) -> dict:
 
     except Exception as e:
         error_msg = "I encountered an error while fetching search information"
-        if DEBUG:
-            print(error_msg + str(e))
+        print(error_msg + str(e))
 
         return {
             "next": SUPERVISOR_NAME,

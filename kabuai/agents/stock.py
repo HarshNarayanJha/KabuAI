@@ -3,7 +3,7 @@ from pprint import pprint
 from typing import Literal, cast
 
 from langchain.chat_models import init_chat_model
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, StateGraph
 from langgraph.types import Command
 from pydantic import BaseModel, Field
@@ -35,16 +35,16 @@ def stock_details_node(state: StockAgentState) -> dict | Command:
     Process stock details request.
     """
 
-    if DEBUG:
-        print("ENTERING stock_details NODE with state:")
-        pprint(
-            {
-                "messages": [(message.type, message.content) for message in state["messages"]],
-                "stock_data": f"{state['stock_data'].metadata}..." if state["stock_data"] else None,
-                "stock_summary": state["stock_summary"],
-                "ticker": state["ticker"],
-            }
-        )
+    # if DEBUG:
+    #     print("ENTERING stock_details NODE with state:")
+    #     pprint(
+    #         {
+    #             "messages": [(message.type, message.content) for message in state["messages"]],
+    #             "stock_data": f"{state['stock_data'].metadata}..." if state["stock_data"] else None,
+    #             "stock_summary": state["stock_summary"],
+    #             "ticker": state["ticker"],
+    #         }
+    #     )
 
     try:
         messages = [
@@ -54,23 +54,46 @@ def stock_details_node(state: StockAgentState) -> dict | Command:
 
         ticker_response = cast(
             StockDetailsResponseFormat,
-            llm.with_structured_output(StockDetailsResponseFormat).invoke(messages),
+            llm_heavy.with_structured_output(StockDetailsResponseFormat).invoke(messages),
         )
 
         if DEBUG:
             print("TickerResponse:", ticker_response.ticker_or_name)
 
-        if not ticker_response.ticker_or_name:
-            return {"ticker": None, "stock_data": None, "stock_summary": None}
+        if not ticker_response or not ticker_response.ticker_or_name:
+            err = f"Did not get a valid ticker response: {ticker_response}"
+            print(f"ERROR: {err}")
+            return Command(
+                goto=SUPERVISOR_NAME,
+                update={
+                    "messages": [AIMessage(content=err, name=STOCK_AGENT_NAME)],
+                    "stock_data": None,
+                    "stock_summary": None,
+                },
+                graph=Command.PARENT,
+            )
 
         if state["ticker"] == ticker_response.ticker_or_name:
             # same ticker, we already have that data, no need to fetch
             return {}
 
-        response: StockData = fetch_stock_details.invoke(ticker_response.ticker_or_name)
+        response: StockData | None = fetch_stock_details.invoke(ticker_response.ticker_or_name)
+        if not response:
+            err = "Unable to fetch stock data. Please try again"
+            print(f"ERROR: {err}")
+            return Command(
+                goto=SUPERVISOR_NAME,
+                update={
+                    "messages": [AIMessage(content=err, name=STOCK_AGENT_NAME)],
+                    "ticker": ticker_response.ticker_or_name,
+                    "stock_data": None,
+                    "stock_summary": None,
+                },
+                graph=Command.PARENT,
+            )
 
-        if DEBUG:
-            print(f"EXITING stock_details NODE with response {response.metadata}...")
+        # if DEBUG:
+        #     print(f"EXITING stock_details NODE with response {response.metadata}...")
 
         return {
             "ticker": response.metadata.symbol,
@@ -79,11 +102,15 @@ def stock_details_node(state: StockAgentState) -> dict | Command:
 
     except Exception as e:
         err = "I encountered an error while fetching stock details"
-        if DEBUG:
-            print(f"ERROR in stock_details NODE: {e}")
+        print(f"ERROR in stock_details NODE: {e}")
         return Command(
             goto=SUPERVISOR_NAME,
-            update={"messages": [AIMessage(content=err, name=STOCK_AGENT_NAME)], "stock_data": None},
+            update={
+                "messages": [AIMessage(content=err, name=STOCK_AGENT_NAME)],
+                "ticker": None,
+                "stock_data": None,
+                "stock_summary": None,
+            },
             graph=Command.PARENT,
         )
 
@@ -93,24 +120,24 @@ def stock_summary_node(state: StockAgentState) -> dict | Command:
     Summarize stock data.
     """
 
-    if DEBUG:
-        print("ENTERING stock_summary NODE with state:")
-        pprint(
-            {
-                "messages": [(message.type, message.content) for message in state["messages"]],
-                "stock_data": f"{state['stock_data'].metadata}..." if state["stock_data"] else None,
-                "stock_summary": state["stock_summary"],
-                "ticker": state["ticker"],
-            }
-        )
+    # if DEBUG:
+    #     print("ENTERING stock_summary NODE with state:")
+    #     pprint(
+    #         {
+    #             "messages": [(message.type, message.content) for message in state["messages"]],
+    #             "stock_data": f"{state['stock_data'].metadata}..." if state["stock_data"] else None,
+    #             "stock_summary": state["stock_summary"],
+    #             "ticker": state["ticker"],
+    #         }
+    #     )
 
     try:
         ticker = state["ticker"]
         stock_data = state["stock_data"]
-        if ticker is None:
+        if not ticker:
             return {"stock_summary": None}
 
-        if stock_data is None:
+        if not stock_data:
             return {"stock_summary": f"No stock data available for {state['ticker']}"}
 
         messages = [
@@ -124,6 +151,17 @@ def stock_summary_node(state: StockAgentState) -> dict | Command:
         ]
 
         response = llm.invoke(messages)
+        if not response:
+            err = "Unable to summarize stock data. Please try again"
+            print(f"ERROR: {err}")
+            return Command(
+                goto=SUPERVISOR_NAME,
+                update={
+                    "messages": [AIMessage(content=err, name=STOCK_AGENT_NAME)],
+                    "stock_summary": None,
+                },
+                graph=Command.PARENT,
+            )
 
         if DEBUG:
             print(f"EXITING stock_summary NODE with response {response.content[:30]}...")
@@ -131,9 +169,8 @@ def stock_summary_node(state: StockAgentState) -> dict | Command:
         return {"stock_summary": str(response.content)}
 
     except Exception as e:
-        if DEBUG:
-            print(f"ERROR in stock_summary NODE: {e}")
         err = "I'm sorry, but I encountered an error while generating the stock summary"
+        print(f"ERROR in stock_summary NODE: {e}")
         return Command(
             goto=SUPERVISOR_NAME,
             update={"messages": [AIMessage(content=err, name=STOCK_AGENT_NAME)], "stock_summary": None},

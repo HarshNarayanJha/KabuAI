@@ -710,7 +710,7 @@ requires-dist = [
     { name = "langgraph", specifier = ">=0.5.0" },
     { name = "requests-sse", specifier = ">=0.5.2" },
     { name = "streamlit", specifier = ">=1.45.1" },
-    { name = "yfinance", specifier = ">=0.2.61" },
+    { name = "yfinance", specifier = "==0.2.61" },
 ]
 
 [package.metadata.requires-dev]
@@ -2019,7 +2019,7 @@ wheels = [
 
 [[package]]
 name = "yfinance"
-version = "0.2.64"
+version = "0.2.61"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "beautifulsoup4" },
@@ -2035,9 +2035,9 @@ dependencies = [
     { name = "requests" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2d/14/29abab5044b48b43730a8ba4006a9b930178966f165cf1235b7dccff62b1/yfinance-0.2.64.tar.gz", hash = "sha256:fa59b4d10ecf637bdd0c67f87e8a3379fee46f621ad931f7a98ba55820f6bf2b", size = 128642, upload-time = "2025-06-27T16:17:33.772Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c1/28/152c38b35453b7d08d56df8ebf81d85448655c5a99b56baae7424f0f8db6/yfinance-0.2.61.tar.gz", hash = "sha256:dc704a23776a43dbd97f352469e6cea8193e9e6cb69d82490bc1a4e6ada6ca37", size = 127391, upload-time = "2025-05-12T08:22:08.846Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9b/7d/a9c924f7581b0207fab5de7e43a5b147018d2d9a619dec83688ccf0c9870/yfinance-0.2.64-py2.py3-none-any.whl", hash = "sha256:9c361a308a043d6844d093f200399002ee44276ad31cbf5b67f1c28cb2390711", size = 119377, upload-time = "2025-06-27T16:17:32.693Z" },
+    { url = "https://files.pythonhosted.org/packages/73/b5/d50eec88bc731bb8570ae42a9b764a36144e217361c33fa068391ff59ba3/yfinance-0.2.61-py2.py3-none-any.whl", hash = "sha256:e52d0fea9deffa55b81496f548104418ca4e6aa5629335064c7d485d355b4dbf", size = 117870, upload-time = "2025-05-12T08:22:07.245Z" },
 ]
 
 [[package]]

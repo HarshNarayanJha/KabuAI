@@ -1,16 +1,20 @@
 import json
+import os
+from pprint import pprint
 from typing import Any, cast
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from langchain_core.messages import AnyMessage, BaseMessage, HumanMessage
+from langchain_core.messages import AnyMessage, BaseMessage, BaseMessageChunk, HumanMessage
 from langgraph.types import Send
 
 from agents.boss import boss
 from constants.agents import SEARCH_AGENT_NAME, STOCK_AGENT_NAME, SUPERVISOR_NAME
 from graph.boss_state import StockBossState
 from models.api import Request, Response
+
+DEBUG = os.getenv("DEBUG", "0") == "1"
 
 
 def invoke_agent(state: StockBossState, callables: list) -> StockBossState:
@@ -35,6 +39,11 @@ async def root():
     return {"message": "Welcome to the KabuAI API!"}
 
 
+@app.get("/health")
+async def health():
+    return {"message": "Health Check!"}
+
+
 @app.post("/chat")
 async def chat(request: Request) -> StreamingResponse:
     state: StockBossState = {
@@ -53,8 +62,15 @@ async def chat(request: Request) -> StreamingResponse:
         # messages -> to get chunk by chunk streaming messages
         # updates -> for tool calls and state updates
 
-        async for mode, data in boss.astream(state, stream_mode=["messages", "updates"], subgraphs=False):
-            # print(mode, data)
+        async for namespace, mode, data in boss.astream(
+            state, stream_mode=["messages", "updates", "tasks"], subgraphs=True
+        ):
+            # if DEBUG:
+            pprint(namespace)
+            pprint(mode)
+            pprint(data)
+            print()
+
             if mode == "messages":
                 token, metadata = cast(tuple[AnyMessage, dict[str, Any]], data)
                 node_name = metadata["langgraph_node"]
@@ -88,17 +104,21 @@ async def chat(request: Request) -> StreamingResponse:
                         yield sse_format(
                             Response(
                                 type="tool",
-                                name="search_web",
+                                name="web_search",
                                 arguments=json.loads(token.additional_kwargs["function_call"]["arguments"]),
                             )
                         )
 
-                elif token.content:
+                elif isinstance(token, BaseMessageChunk) and token.content:
                     # message chunk
+                    agent_name = node_name
+                    if namespace and namespace[0] and ":" in namespace[0]:
+                        agent_name = namespace[0].split(":")[0]
+
                     yield sse_format(
                         Response(
                             type="chunk",
-                            name=node_name,
+                            name=agent_name,
                             content=str(token.content),
                         )
                     )
@@ -154,6 +174,25 @@ async def chat(request: Request) -> StreamingResponse:
                             state=updated_state,
                         )
                     )
+                elif "stock_details_node" in data:
+                    updated_state = cast(dict[str, Any], data["stock_details_node"])
+
+                    yield sse_format(
+                        Response(
+                            type="update",
+                            state=updated_state,
+                        )
+                    )
+                elif "stock_summary_node" in data:
+                    updated_state = cast(dict[str, Any], data["stock_summary_node"])
+
+                    yield sse_format(
+                        Response(
+                            type="update",
+                            state=updated_state,
+                        )
+                    )
+
                 elif SEARCH_AGENT_NAME in data:
                     updated_state = cast(dict[str, Any], data[SEARCH_AGENT_NAME])
 
@@ -176,6 +215,51 @@ async def chat(request: Request) -> StreamingResponse:
                             state=updated_state,
                         )
                     )
+                elif "search_news_node" in data:
+                    updated_state = cast(dict[str, Any], data["search_news_node"])
+
+                    yield sse_format(
+                        Response(
+                            type="update",
+                            state=updated_state,
+                        )
+                    )
+                elif "sentiment_news_node" in data:
+                    updated_state = cast(dict[str, Any], data["sentiment_news_node"])
+
+                    yield sse_format(
+                        Response(
+                            type="update",
+                            state=updated_state,
+                        )
+                    )
+                elif "news_summary_node" in data:
+                    updated_state = cast(dict[str, Any], data["news_summary_node"])
+
+                    yield sse_format(
+                        Response(
+                            type="update",
+                            state=updated_state,
+                        )
+                    )
+
+            elif mode == "tasks":
+                # Emit task changes (not in use right now)
+                data = cast(dict[str, Any], data)
+
+                direction = None
+                if "input" in data:
+                    direction = "enter"
+                elif "result" in data:
+                    direction = "leave"
+
+                yield sse_format(
+                    Response(
+                        type="task",
+                        name=data["name"],
+                        direction=direction,
+                    )
+                )
             else:
                 raise ValueError(f"Invalid Mode {mode}")
 

@@ -89,8 +89,8 @@ class News(BaseModel):
 
 
 class StockData(BaseModel):
-    company: CompanyDetails = Field(description="Company details")
+    company: CompanyDetails = Field(description="Company details", repr=False)
     metadata: StockMetadata = Field(description="General information about the stock")
-    prices: list[StockPrice] = Field(description="Historical price data")
-    financials: Financials = Field(description="Financial metrics and ratios")
-    news: list[News] = Field(description="Related news articles")
+    prices: list[StockPrice] = Field(description="Historical price data", repr=False)
+    financials: Financials = Field(description="Financial metrics and ratios", repr=False)
+    news: list[News] = Field(description="Related news articles", repr=False)
