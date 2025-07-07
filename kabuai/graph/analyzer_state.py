@@ -1,24 +1,15 @@
 from langgraph.graph import MessagesState
-from langgraph.types import Send
 
 from models.search import SearchResult
 from models.stock import StockData
 
 
-class StockBossState(MessagesState):
-    next: str | Send
-    # stock agent
+class AnalyzerAgentState(MessagesState):
     ticker: str | None
     stock_data: StockData | None
     stock_summary: str | None
-    # search agent
-    search_query: str | None
     search_results: list[SearchResult]
     search_summary: str | None
-    # analyzer agent
+    # outputs
     analysis_result: str | None
     analysis_score: float | None
-    # prediction: str
-    # risk_summary: str
-    # risk_score: float
-    # advice: str

@@ -18,6 +18,9 @@ class APIState(BaseModel):
     search_query: str | None = Field(default=None)
     search_results: list[SearchResult] = Field(default=[])
     search_summary: str | None = Field(default=None)
+    # analysis_agent
+    analysis_result: str | None = Field(default=None)
+    analysis_score: float | None = Field(default=None)
 
 
 class Request(BaseModel):

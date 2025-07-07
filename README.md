@@ -58,7 +58,11 @@ KabuAI is made up with 6 agents working together.
 
    ![Search Agent](./kabuai/search_graph.png)
 
-...
+4. Analyzer
+   This agent analyzes the stock data and news to give detailed insights about the stock, and an analysis score.
+   It has access to search tool to search the web if it needs anything latest.
+
+   ![Analyzer Agent](./kabuai/analyzer_graph.png)
 
 ## Tools
 

@@ -7,10 +7,10 @@ import humanize
 import requests
 import streamlit as st
 from requests_sse import EventSource, InvalidContentTypeError, InvalidStatusCodeError
-from utils.prompt import SYSTEM_PROMPT
 
 from constants.agents import SUPERVISOR_NAME
 from models.api import APIState, Message, Request, Response
+from utils.prompt import SYSTEM_PROMPT
 
 URL = os.getenv("API_URL", "")
 HEADERS = {"Content-Type": "application/json"}
@@ -74,6 +74,8 @@ initial_state = APIState(
     search_query=None,
     search_results=[],
     search_summary=None,
+    analysis_result=None,
+    analysis_score=None,
 )
 
 if "state" not in st.session_state:
@@ -223,6 +225,12 @@ if (
 
                                 if data.state.search_summary is not None:
                                     st.session_state.state.search_summary = data.state.search_summary
+
+                                if data.state.analysis_result is not None:
+                                    st.session_state.state.analysis_result = data.state.analysis_result
+
+                                if data.state.analysis_score is not None:
+                                    st.session_state.state.analysis_score = data.state.analysis_score
 
                         case "chunk":
                             # stop handoff spinner on state.next update instead

@@ -10,7 +10,7 @@ from langchain_core.messages import AnyMessage, BaseMessage, BaseMessageChunk, H
 from langgraph.types import Send
 
 from agents.boss import boss
-from constants.agents import SEARCH_AGENT_NAME, STOCK_AGENT_NAME, SUPERVISOR_NAME
+from constants.agents import ANALYZER_AGENT_NAME, SEARCH_AGENT_NAME, STOCK_AGENT_NAME, SUPERVISOR_NAME
 from graph.boss_state import StockBossState
 from models.api import Request, Response
 
@@ -55,6 +55,8 @@ async def chat(request: Request) -> StreamingResponse:
         "search_query": request.state.search_query or None,
         "search_results": request.state.search_results or [],
         "search_summary": request.state.search_summary or None,
+        "analysis_result": request.state.analysis_result or None,
+        "analysis_score": request.state.analysis_score or None,
     }
 
     async def stream_generator():
@@ -105,6 +107,17 @@ async def chat(request: Request) -> StreamingResponse:
                             Response(
                                 type="tool",
                                 name="web_search",
+                                arguments=json.loads(token.additional_kwargs["function_call"]["arguments"]),
+                            )
+                        )
+
+                    elif node_name in (ANALYZER_AGENT_NAME, "perform_analysis_node"):
+                        # it is the search tool call
+                        # yield tool call message
+                        yield sse_format(
+                            Response(
+                                type="tool",
+                                name="web_analysis",
                                 arguments=json.loads(token.additional_kwargs["function_call"]["arguments"]),
                             )
                         )
@@ -243,6 +256,38 @@ async def chat(request: Request) -> StreamingResponse:
                         )
                     )
 
+                elif ANALYZER_AGENT_NAME in data:
+                    updated_state = cast(dict[str, Any], data[ANALYZER_AGENT_NAME])
+
+                    if "next" in updated_state and isinstance(updated_state["next"], Send):
+                        updated_state["next"] = updated_state["next"].node
+
+                    if "messages" in updated_state:
+                        updated_messages = []
+                        for msg in updated_state["messages"]:
+                            if isinstance(msg, BaseMessage):
+                                updated_messages.append({"type": msg.type, "content": msg.content, "name": msg.name})
+                            else:
+                                updated_messages.append(msg)
+
+                        updated_state["messages"] = updated_messages
+
+                    yield sse_format(
+                        Response(
+                            type="update",
+                            state=updated_state,
+                        )
+                    )
+                elif "perform_analysis_node" in data:
+                    updated_state = cast(dict[str, Any], data["perform_analysis_node"])
+
+                    yield sse_format(
+                        Response(
+                            type="update",
+                            state=updated_state,
+                        )
+                    )
+
             elif mode == "tasks":
                 # Emit task changes (not in use right now)
                 data = cast(dict[str, Any], data)
@@ -276,10 +321,13 @@ if __name__ == "__main__":
         "search_query": None,
         "search_results": [],
         "search_summary": None,
+        "analysis_result": None,
+        "analysis_score": None,
     }
     while True:
+        pprint([(message.type, message.content, message.name) for message in state["messages"]])
+
         query = input("You> ").strip()
         state["messages"].append(HumanMessage(query))
         result = invoke_agent(state, [])
-        print(result["messages"])
         state.update(result)

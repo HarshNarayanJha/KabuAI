@@ -55,7 +55,7 @@ def search_news_node(state: SearchAgentState) -> dict | Command:
                 graph=Command.PARENT,
             )
 
-        response = search_web(query_response.query)
+        response = search_web.invoke({"query": query_response.query, "what": "news"})
 
         print("Leaving search_news_node")
         # continue to sentiment node
@@ -88,6 +88,7 @@ def sentiment_news_node(state: SearchAgentState) -> dict | Command:
     print("Entering sentiment_news_node in search agent")
     try:
         if not state["search_results"]:
+            print("Leaving sentiment_news_node since no search results")
             return {}
 
         messages = [
@@ -165,6 +166,7 @@ def news_summary_node(state: SearchAgentState) -> dict | Command:
     print("Entering news_summary_node in search agent")
     try:
         if not state["search_results"]:
+            print("Leaving news_summary_node since no search results")
             return {}
 
         messages = summary_prompt_template.invoke(

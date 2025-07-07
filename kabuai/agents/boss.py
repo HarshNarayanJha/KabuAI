@@ -11,11 +11,13 @@ from langgraph.graph import END, StateGraph
 from langgraph.types import Command, Send
 from pydantic import BaseModel, Field
 
+from agents.analyzer import analyzer_agent
 from agents.search import search_agent
 from agents.stock import stock_agent
 from ai_models.chat import chat_model, chat_model_heavy, chat_model_light  # noqa: F401
 from ai_models.llm import llm, llm_heavy, llm_light  # noqa: F401
-from constants.agents import MEMBERS, SEARCH_AGENT_NAME, STOCK_AGENT_NAME, SUPERVISOR_NAME
+from constants.agents import ANALYZER_AGENT_NAME, MEMBERS, SEARCH_AGENT_NAME, STOCK_AGENT_NAME, SUPERVISOR_NAME
+from graph.analyzer_state import AnalyzerAgentState
 from graph.boss_state import StockBossState
 from graph.search_state import SearchAgentState
 from graph.stock_state import StockAgentState
@@ -27,7 +29,7 @@ OPTIONS = MEMBERS + ["FINISH"]
 
 
 class Router(BaseModel):
-    next: Literal["stock_agent", "search_agent", "FINISH"] = Field(
+    next: Literal["stock_agent", "search_agent", "analyzer_agent", "FINISH"] = Field(
         description="Agent to route to next. If no agents needed, route to FINISH."
     )
     message: str = Field(..., description="Response Message to the user.")
@@ -50,6 +52,11 @@ def boss_node(state: StockBossState) -> Command | dict:
                 # any of the state vars from any agent is there
                 (last_message.name == STOCK_AGENT_NAME and state["stock_summary"] and state["stock_data"])
                 or (last_message.name == SEARCH_AGENT_NAME and state["search_results"] and state["search_summary"])
+                or (
+                    last_message.name == ANALYZER_AGENT_NAME
+                    and state["analysis_result"]
+                    and state["analysis_score"] is not None
+                )
             )
         ):
             prompt = ChatPromptTemplate.from_messages(
@@ -72,18 +79,6 @@ def boss_node(state: StockBossState) -> Command | dict:
                 ],
                 "next": END,
             }
-            # return Command(
-            #     goto=END,
-            #     update={
-            #         "next": END,
-            #         "messages": [
-            #             AIMessage(
-            #                 supervisor_response.content,
-            #                 name=SUPERVISOR_NAME,
-            #             ),
-            #         ],
-            #     },
-            # )
 
         messages = supervisor_prompt_template.invoke(
             {
@@ -105,13 +100,6 @@ def boss_node(state: StockBossState) -> Command | dict:
                 "next": END,
                 "messages": [AIMessage("I have encountered an error. Please try again.", name=SUPERVISOR_NAME)],
             }
-            # return Command(
-            #     goto=END,
-            #     update={
-            #         "next": END,
-            #         "messages": [AIMessage("I have encountered an error. Please try again.", name=SUPERVISOR_NAME)],
-            # },
-            # )
 
         goto = response.next
         if goto == "FINISH":
@@ -121,8 +109,6 @@ def boss_node(state: StockBossState) -> Command | dict:
 
             print("Leaving boss_node in supervisor since routed to FINISH")
             return finishing_update
-
-            # return Command(goto=END, update=finishing_update)
 
         print(f"Leaving boss_node in supervisor since going to {goto}")
         return Command(
@@ -147,14 +133,6 @@ def boss_node(state: StockBossState) -> Command | dict:
             "next": END,
             "messages": [AIMessage(error_msg, name=SUPERVISOR_NAME)],
         }
-
-        # return Command(
-        #     goto=END,
-        #     update={
-        #         "next": END,
-        #         "messages": [AIMessage(error_msg, name=SUPERVISOR_NAME)],
-        #     },
-        # )
 
 
 def call_stock_agent(state: StockBossState) -> dict:
@@ -244,12 +222,56 @@ def call_search_agent(state: StockBossState) -> dict:
         }
 
 
+def call_analyzer_agent(state: StockBossState) -> dict:
+    print("Entering analyzer_agent in supervisor")
+    try:
+        send: Send = cast(Send, state["next"])
+        analyzer_state: AnalyzerAgentState = {
+            "ticker": state["ticker"],
+            "stock_data": state["stock_data"],
+            "stock_summary": state["stock_summary"],
+            "messages": send.arg["messages"],
+            "search_results": state["search_results"],
+            "search_summary": state["search_summary"],
+            "analysis_result": state["analysis_result"],
+            "analysis_score": state["analysis_score"],
+        }
+
+        analysis_result: AnalyzerAgentState = cast(AnalyzerAgentState, analyzer_agent.invoke(analyzer_state))
+
+        analysis = analysis_result["analysis_result"]
+        if not analysis:
+            error_msg = "I was unable to analyze the provided data. Could you please try again?"
+            print(error_msg)
+            return {
+                "next": SUPERVISOR_NAME,
+                "messages": [AIMessage(error_msg, name=ANALYZER_AGENT_NAME)],
+            }
+
+        print("Leaving analyzer_agent with data")
+        return {
+            "next": SUPERVISOR_NAME,
+            "analysis_result": analysis,
+            "analysis_score": analysis_result["analysis_score"],
+            "messages": [AIMessage(analysis, name=ANALYZER_AGENT_NAME)],
+        }
+
+    except Exception as e:
+        error_msg = "I encountered an error while fetching search information"
+        print(error_msg + str(e))
+
+        return {
+            "next": SUPERVISOR_NAME,
+            "messages": [AIMessage(error_msg, name=ANALYZER_AGENT_NAME)],
+        }
+
+
 boss = (
     StateGraph(StockBossState)
     .add_node(
         SUPERVISOR_NAME,
         boss_node,
-        destinations=(STOCK_AGENT_NAME, SEARCH_AGENT_NAME, END),
+        destinations=(STOCK_AGENT_NAME, SEARCH_AGENT_NAME, ANALYZER_AGENT_NAME, END),
     )
     .add_node(
         STOCK_AGENT_NAME,
@@ -261,10 +283,16 @@ boss = (
         call_search_agent,
         destinations=(SUPERVISOR_NAME,),
     )
+    .add_node(
+        ANALYZER_AGENT_NAME,
+        call_analyzer_agent,
+        destinations=(SUPERVISOR_NAME,),
+    )
     #
     .set_entry_point(SUPERVISOR_NAME)
     .add_edge(STOCK_AGENT_NAME, SUPERVISOR_NAME)
     .add_edge(SEARCH_AGENT_NAME, SUPERVISOR_NAME)
+    .add_edge(ANALYZER_AGENT_NAME, SUPERVISOR_NAME)
     # end would be the final verdict agent
     .set_finish_point(SUPERVISOR_NAME)
     .compile(debug=DEBUG)
@@ -286,6 +314,8 @@ if __name__ == "__main__":
         "search_query": None,
         "search_results": [],
         "search_summary": None,
+        "analysis_result": None,
+        "analysis_score": None,
     }
 
     config: RunnableConfig = {"configurable": {"thread_id": "1"}}
@@ -302,6 +332,7 @@ if __name__ == "__main__":
                 "search_query": state["search_query"],
                 "search_results": len(state["search_results"]),
                 "search_summary": f"{state['search_summary'][:30]}..." if state["search_summary"] else None,
+                "analysis_result": f"{state['analysis_result'][:30]}..." if state["analysis_result"] else None,
             }
         )
         print("\n\n========")

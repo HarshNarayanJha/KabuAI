@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["kabuai", "agents", "constants", "graph", "models", "prompts", "tools", "ai_models"]
+known-first-party = ["kabuai", "agents", "constants", "graph", "models", "prompts", "tools", "ai_models", "utils"]
 
 [tool.basedpyright]
 reportUnusedCallResult = "none"
@@ -31,6 +31,7 @@ reportUnknownArgumentType = "none"
 reportUnknownParameterType = "none"
 reportMissingTypeArgument = "none"
 reportUnusedImport = "none"
+reportExplicitAny = "none"
 reportAny = "none"
 useLibraryCodeForTypes = true
 executionEnvironments = [

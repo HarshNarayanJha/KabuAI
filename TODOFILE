@@ -1,6 +1,9 @@
 Make 20 real world queries and test them
 
-add memory stores and explore chroma db
-use async if required
+Show graphs and histories and more data in streamlit
 
-NEXT, add tavily search for news and general details
+make those persist on the sidebar
+
+make a next_list instead of next state, to make the supervisor follow a sequence of agents to call
+
+use async if required
