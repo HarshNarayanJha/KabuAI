@@ -249,7 +249,7 @@ boss = (
     .add_node(
         SUPERVISOR_NAME,
         boss_node,
-        destinations=(STOCK_AGENT_NAME, END),
+        destinations=(STOCK_AGENT_NAME, SEARCH_AGENT_NAME, END),
     )
     .add_node(
         STOCK_AGENT_NAME,

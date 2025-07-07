@@ -21,7 +21,7 @@ with [FastAPI](https://fastapi.tiangolo.com/) serving the API, and finally [Stre
 LangGraph enables KabuAI to be really powerful about it's decision making by incorporating the latest LLMs into the graph
 that understand user's query better. The ability to make predictable routes based on user's query feels like magic.
 
-FastAPI serves a quick and easy way to server streaming async routes for interacting with the powerful agent at the back.
+FastAPI serves a quick and easy way to serve streaming async routes for interacting with the powerful agent at the back.
 
 ### LangGraph Framework
 
@@ -53,8 +53,10 @@ KabuAI is made up with 6 agents working together.
    ![Boss Agent](./kabuai/stock_graph.png)
 
 3. Search
-   This agent can search the web for the latest news and data using [Tavily](https://www.tavily.com/) search API.
-   It feeds the LLM with the news and other factors which will be relevant for making further decisions.
+   This agent can search the web for the latest news and data using [DuckDuckGo](https://www.duckduckgo.com/) search API.
+   It feeds the LLM with the news and sentiment analysis which will be relevant for making further decisions.
+
+   ![Search Agent](./kabuai/search_graph.png)
 
 ...
 
@@ -63,12 +65,12 @@ KabuAI is made up with 6 agents working together.
 KabuAI uses these tools
 
 - `fetch_stock_details` -> Uses [yfinance](https://ranaroussi.github.io/yfinance/index.html)
-- `search_web` -> Uses [Tavily](https://www.tavily.com/)
+- `search_web` -> Uses [DuckDuckGo](https://www.duckduckgo.com/)
   ...
 
 ## Process Flow
 
-The FastAPI endpoint `/chat` accepts an `APIState` as input, which is similar to the `StockBossState`, but is a little more permissive about the values.
+The FastAPI endpoint `/chat` accepts an `APIState` as input, which is similar to the `StockBossState`, but is a little more permissive about the values (serialization and more).
 The state is then passed over to the boss agent, which uses a LLM as a router to decide which agent to go to next.
 After the decision is made, a system prompt is generated for the next agent describing its work,
 which is then performed by the agent, using tools if applicable, and then returned back to the boss agent.
@@ -121,19 +123,35 @@ _PS: See, uv makes it a lot simpler_
 
 ### Configuration
 
-KabuAI requires a little configuration to be done before being able to run. You will see a `.env.example` file in the root of the project.
-Copy that to `.env`
+KabuAI requires a little configuration to be done before being able to run. You will see a `.env.example` and `.env.ui.example` file in the root of the project.
+Copy that to `.env` and `.env.ui` respectively.
 
 ```sh
-cp .env.example env
+cp .env.example .env
+cp .env.ui.example .env.ui
 ```
 
 and fill in the environment variables
 
 - `GOOGLE_API_KEY`: Your very own Google API Key to call the LLMs.
-- `CHAT_MODEL_LIGHT`: Chat model to use for the light LLM calls. Specify in [langchain](https://python.langchain.com/docs/integrations/chat/) style (`provider:model_name`)
-- `CHAT_MODEL`: Chat model to use for the medium LLM calls.
-- `CHAT_MODEL_HEAVY`: Chat model to use for the heavy LLM calls.
+
+- `CHAT_MODEL_LIGHT`: Chat model to use for the light Chat calls. Specify in [langchain](https://python.langchain.com/docs/integrations/chat/) style (`provider:model_name`)
+- `CHAT_MODEL`: Chat model to use for the medium Chat calls.
+- `CHAT_MODEL_HEAVY`: Chat model to use for the heavy Chat calls.
+
+- `LLM_MODEL_LIGHT`: LLM model to use for the light llm calls.
+- `LLM_MODEL`: LLM model to use for the medium llm calls.
+- `LLM_MODEL_HEAVY`: LLM model to use for the heavy llm calls.
+
+- `TEMPERATURE`: Temperature to use for the LLM calls.
+
+And for the UI
+
+- `API_URL`: Server API endpoint.
+- `INITIAL_MESSAGE`: Initial message in the chat by KabuAI
+
+Common in both
+
 - `DEBUG`: Enable debug mode for LangGraph agents and Streamlit requests.
 
 Note: You may need to add more `*_API_KEY` variables depending on which models you choose. Refer to the LangGraph docs.
@@ -155,14 +173,14 @@ There is a test script `./test_sse_events.py` that you can use to test the FastA
 The streamlit app is located inside the `./ui` directory. It is a simple multi-page application serving different pages for different purposes.
 It uses `requests_sse` package to listen to the Server Side Events emitted by the FastAPI backend.
 
-It currently shows handoff events and tool calls, as well as message streaming, having a simple chat interface using streamlit's built in chat components.
+It currently shows handoff events and tool calls, as well as message streaming, with data elements for stock and search results and a chat layout using streamlit's built in components.
 
 ### Features
 
 - Ask Stock Details
 - Know Current and Past Prices
 - Analyze stock data
-- Get latest stock news
+- Get latest news
 
 ## The name
 
