@@ -3,26 +3,19 @@ import os
 from pprint import pprint
 from typing import cast
 
-from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.types import Command
 from pydantic import BaseModel, Field
 
+from ai_models.chat import chat_model, chat_model_heavy, chat_model_light  # noqa: F401
+from ai_models.llm import llm, llm_heavy, llm_light  # noqa: F401
 from constants.agents import SEARCH_AGENT_NAME, SUPERVISOR_NAME
 from graph.search_state import SearchAgentState
 from prompts.search import search_prompt, sentiment_prompt, summary_prompt_template
 from tools.search import search_web
 
-CHAT_MODEL = os.getenv("CHAT_MODEL") or ""
-CHAT_MODEL_LIGHT = os.getenv("CHAT_MODEL_LIGHT") or ""
-CHAT_MODEL_HEAVY = os.getenv("CHAT_MODEL_HEAVY") or ""
-
 DEBUG = os.getenv("DEBUG", "0") == "1"
-
-llm = init_chat_model(model=CHAT_MODEL, temperature=0, max_tokens=2048)
-llm_light = init_chat_model(model=CHAT_MODEL_LIGHT, temperature=0, max_tokens=4096)
-llm_heavy = init_chat_model(model=CHAT_MODEL_HEAVY, temperature=0)
 
 
 class SearchQueryResponseFormat(BaseModel):
@@ -34,15 +27,7 @@ def search_news_node(state: SearchAgentState) -> dict | Command:
     Searches the web based on the system instruction and user's query
     """
 
-    # if DEBUG:
-    #     print("ENTERING search_news NODE with state:")
-    #     pprint(
-    #         {
-    #             **state,
-    #             "messages": [(message.type, message.content) for message in state["messages"]],
-    #         }
-    #     )
-
+    print("Entering search_news_node in search agent")
     try:
         messages = [
             SystemMessage(search_prompt.format(ticker=state["ticker"], stock_summary=state["stock_summary"])),
@@ -50,7 +35,7 @@ def search_news_node(state: SearchAgentState) -> dict | Command:
         ]
 
         query_response = cast(
-            SearchQueryResponseFormat, llm.with_structured_output(SearchQueryResponseFormat).invoke(messages)
+            SearchQueryResponseFormat, chat_model.with_structured_output(SearchQueryResponseFormat).invoke(messages)
         )
 
         if DEBUG:
@@ -59,6 +44,7 @@ def search_news_node(state: SearchAgentState) -> dict | Command:
         # return to supervisor
         if not query_response or not query_response.query:
             err = "I was unable to generate a search query"
+            print(err)
             return Command(
                 goto=SUPERVISOR_NAME,
                 update={
@@ -71,9 +57,7 @@ def search_news_node(state: SearchAgentState) -> dict | Command:
 
         response = search_web(query_response.query)
 
-        # if DEBUG:
-        #     print(f"EXITING search_news NODE with response {response}")
-
+        print("Leaving search_news_node")
         # continue to sentiment node
         return {"search_query": query_response.query, "search_results": response}
 
@@ -101,15 +85,7 @@ def sentiment_news_node(state: SearchAgentState) -> dict | Command:
     Performs Sentiment Analysis on the search results
     """
 
-    # if DEBUG:
-    #     print("ENTERING sentiment_news NODE with state:")
-    #     pprint(
-    #         {
-    #             **state,
-    #             "messages": [(message.type, message.content) for message in state["messages"]],
-    #         }
-    #     )
-
+    print("Entering sentiment_news_node in search agent")
     try:
         if not state["search_results"]:
             return {}
@@ -131,7 +107,7 @@ def sentiment_news_node(state: SearchAgentState) -> dict | Command:
 
         response = cast(
             SentimentResultsResponseFormat,
-            llm_light.with_structured_output(SentimentResultsResponseFormat).invoke(messages),
+            chat_model_light.with_structured_output(SentimentResultsResponseFormat).invoke(messages),
         )
 
         if DEBUG:
@@ -148,6 +124,7 @@ def sentiment_news_node(state: SearchAgentState) -> dict | Command:
             or any([x > 1 or x < 0 for x in response.confidence_scores])
         ):
             err = "I was unable to generate sentiment scores"
+            print(err)
             return Command(
                 goto=SUPERVISOR_NAME,
                 update={
@@ -165,6 +142,7 @@ def sentiment_news_node(state: SearchAgentState) -> dict | Command:
 
             updated_search_results.append(mod_result)
 
+        print("Leaving sentiment_news_node")
         return {"search_results": updated_search_results}
 
     except Exception as e:
@@ -184,15 +162,7 @@ def news_summary_node(state: SearchAgentState) -> dict | Command:
     Summarizes the search results to answer user's initial query.
     """
 
-    # if DEBUG:
-    #     print("ENTERING news_summary NODE with state:")
-    #     pprint(
-    #         {
-    #             **state,
-    #             "messages": [(message.type, message.content) for message in state["messages"]],
-    #         }
-    #     )
-
+    print("Entering news_summary_node in search agent")
     try:
         if not state["search_results"]:
             return {}
@@ -217,8 +187,9 @@ def news_summary_node(state: SearchAgentState) -> dict | Command:
         if DEBUG:
             print(f"GOT response in news_summary NODE: {response}")
 
-        if not response or not response.content:
+        if not response:  # or not response.content:
             err = "I was unable to generate the answer."
+            print(err)
             return Command(
                 goto=SUPERVISOR_NAME,
                 update={
@@ -228,7 +199,9 @@ def news_summary_node(state: SearchAgentState) -> dict | Command:
                 graph=Command.PARENT,
             )
 
-        return {"search_summary": response.content}
+        print("Leaving news_summary_node in search agent")
+        # return {"search_summary": response.content}
+        return {"search_summary": response}
 
     except Exception as e:
         err = "I'm sorry, but I encountered an error while summarizing news"

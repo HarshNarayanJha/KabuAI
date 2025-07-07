@@ -2,28 +2,21 @@ import os
 from pprint import pprint
 from typing import Literal, cast
 
-from langchain.chat_models import init_chat_model
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.types import Command
 from pydantic import BaseModel, Field
 
+from ai_models.chat import chat_model, chat_model_heavy, chat_model_light  # noqa: F401
+from ai_models.llm import llm, llm_heavy, llm_light  # noqa: F401
 from constants.agents import STOCK_AGENT_NAME, SUPERVISOR_NAME
 from graph.stock_state import StockAgentState
 from models.stock import StockData
 from prompts.stock import fetch_prompt, summary_prompt
 from tools.stock import fetch_stock_details
 
-CHAT_MODEL = os.getenv("CHAT_MODEL") or ""
-CHAT_MODEL_LIGHT = os.getenv("CHAT_MODEL_LIGHT") or ""
-CHAT_MODEL_HEAVY = os.getenv("CHAT_MODEL_HEAVY") or ""
-
 DEBUG = os.getenv("DEBUG", "0") == "1"
 SUMMARY_LENGTH: Literal["short", "medium", "long"] = "medium"
-
-llm = init_chat_model(model=CHAT_MODEL, temperature=0, max_tokens=2048)
-llm_light = init_chat_model(model=CHAT_MODEL_LIGHT, temperature=0, max_tokens=4096)
-llm_heavy = init_chat_model(model=CHAT_MODEL_HEAVY, temperature=0)
 
 
 class StockDetailsResponseFormat(BaseModel):
@@ -35,17 +28,7 @@ def stock_details_node(state: StockAgentState) -> dict | Command:
     Process stock details request.
     """
 
-    # if DEBUG:
-    #     print("ENTERING stock_details NODE with state:")
-    #     pprint(
-    #         {
-    #             "messages": [(message.type, message.content) for message in state["messages"]],
-    #             "stock_data": f"{state['stock_data'].metadata}..." if state["stock_data"] else None,
-    #             "stock_summary": state["stock_summary"],
-    #             "ticker": state["ticker"],
-    #         }
-    #     )
-
+    print("Entering stock_details_node in stock agent")
     try:
         messages = [
             SystemMessage(fetch_prompt),
@@ -54,7 +37,7 @@ def stock_details_node(state: StockAgentState) -> dict | Command:
 
         ticker_response = cast(
             StockDetailsResponseFormat,
-            llm_heavy.with_structured_output(StockDetailsResponseFormat).invoke(messages),
+            chat_model_heavy.with_structured_output(StockDetailsResponseFormat).invoke(messages),
         )
 
         if DEBUG:
@@ -75,6 +58,7 @@ def stock_details_node(state: StockAgentState) -> dict | Command:
 
         if state["ticker"] == ticker_response.ticker_or_name:
             # same ticker, we already have that data, no need to fetch
+            print("Leaving stock_details_node since ticker is the same")
             return {}
 
         response: StockData | None = fetch_stock_details.invoke(ticker_response.ticker_or_name)
@@ -92,9 +76,7 @@ def stock_details_node(state: StockAgentState) -> dict | Command:
                 graph=Command.PARENT,
             )
 
-        # if DEBUG:
-        #     print(f"EXITING stock_details NODE with response {response.metadata}...")
-
+        print("leaving stock_details_node with data")
         return {
             "ticker": response.metadata.symbol,
             "stock_data": response,
@@ -120,24 +102,16 @@ def stock_summary_node(state: StockAgentState) -> dict | Command:
     Summarize stock data.
     """
 
-    # if DEBUG:
-    #     print("ENTERING stock_summary NODE with state:")
-    #     pprint(
-    #         {
-    #             "messages": [(message.type, message.content) for message in state["messages"]],
-    #             "stock_data": f"{state['stock_data'].metadata}..." if state["stock_data"] else None,
-    #             "stock_summary": state["stock_summary"],
-    #             "ticker": state["ticker"],
-    #         }
-    #     )
-
+    print("Entering stock_summary_node in stock agent")
     try:
         ticker = state["ticker"]
         stock_data = state["stock_data"]
         if not ticker:
+            print("Leaving stock_summary_node since no ticker")
             return {"stock_summary": None}
 
         if not stock_data:
+            print("Leaving stock_summary_node since no stock data")
             return {"stock_summary": f"No stock data available for {state['ticker']}"}
 
         messages = [
@@ -150,7 +124,7 @@ def stock_summary_node(state: StockAgentState) -> dict | Command:
             *state["messages"],
         ]
 
-        response = llm.invoke(messages)
+        response = chat_model.invoke(messages)
         if not response:
             err = "Unable to summarize stock data. Please try again"
             print(f"ERROR: {err}")
@@ -163,9 +137,7 @@ def stock_summary_node(state: StockAgentState) -> dict | Command:
                 graph=Command.PARENT,
             )
 
-        if DEBUG:
-            print(f"EXITING stock_summary NODE with response {response.content[:30]}...")
-
+        print("Leaving stock_summary_node with data")
         return {"stock_summary": str(response.content)}
 
     except Exception as e:

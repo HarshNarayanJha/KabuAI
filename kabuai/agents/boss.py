@@ -3,7 +3,6 @@ from datetime import datetime
 from pprint import pprint
 from typing import Literal, cast
 
-from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableConfig
@@ -14,24 +13,16 @@ from pydantic import BaseModel, Field
 
 from agents.search import search_agent
 from agents.stock import stock_agent
+from ai_models.chat import chat_model, chat_model_heavy, chat_model_light  # noqa: F401
+from ai_models.llm import llm, llm_heavy, llm_light  # noqa: F401
 from constants.agents import MEMBERS, SEARCH_AGENT_NAME, STOCK_AGENT_NAME, SUPERVISOR_NAME
 from graph.boss_state import StockBossState
 from graph.search_state import SearchAgentState
 from graph.stock_state import StockAgentState
 from prompts.boss import DONE_PROMPT, supervisor_prompt_template
 
-CHAT_MODEL = os.getenv("CHAT_MODEL") or ""
-CHAT_MODEL_LIGHT = os.getenv("CHAT_MODEL_LIGHT") or ""
-CHAT_MODEL_HEAVY = os.getenv("CHAT_MODEL_HEAVY") or ""
 DEBUG = os.getenv("DEBUG", "0") == "1"
-
-llm = init_chat_model(model=CHAT_MODEL, temperature=0, max_tokens=2048)
-llm_light = init_chat_model(model=CHAT_MODEL_LIGHT, temperature=0, max_tokens=4096)
-llm_heavy = init_chat_model(model=CHAT_MODEL_HEAVY, temperature=0)
-
-
 checkpointer = InMemorySaver()
-
 OPTIONS = MEMBERS + ["FINISH"]
 
 
@@ -43,20 +34,8 @@ class Router(BaseModel):
     system_instruction: str = Field(..., description="Very Brief system instruction to the agent you are routing to.")
 
 
-def boss_node(state: StockBossState) -> Command:
-    # if DEBUG:
-    #     print("ENTERING Boss Node with state:")
-    #     pprint(
-    #         {
-    #             "messages": [message.content for message in state["messages"]],
-    #             "stock_data": f"{state['stock_data'].metadata}..." if state["stock_data"] else None,
-    #             "stock_summary": f"{state['stock_summary'][:30]}..." if state["stock_summary"] else None,
-    #             "ticker": state["ticker"],
-    #             "next": state["next"],
-    #             "search_query": state["search_query"],
-    #             "search_results": len(state["search_results"]),
-    #         }
-    #     )
+def boss_node(state: StockBossState) -> Command | dict:
+    print("Entering boss_node in supervisor")
 
     try:
         # Let's check if we already have the summary
@@ -69,8 +48,8 @@ def boss_node(state: StockBossState) -> Command:
             and last_message.name in MEMBERS
             and (
                 # any of the state vars from any agent is there
-                (state["stock_summary"] and state["stock_data"])
-                or (state["search_results"] and state["search_summary"])
+                (last_message.name == STOCK_AGENT_NAME and state["stock_summary"] and state["stock_data"])
+                or (last_message.name == SEARCH_AGENT_NAME and state["search_results"] and state["search_summary"])
             )
         ):
             prompt = ChatPromptTemplate.from_messages(
@@ -80,21 +59,31 @@ def boss_node(state: StockBossState) -> Command:
                 ]
             )
 
-            supervisor_response = llm_heavy.invoke(prompt.invoke({"messages": state["messages"]}))
+            supervisor_response = chat_model.invoke(prompt.invoke({"messages": state["messages"]}))
 
             # completed
-            return Command(
-                goto=END,
-                update={
-                    "next": END,
-                    "messages": [
-                        AIMessage(
-                            supervisor_response.content,
-                            name=SUPERVISOR_NAME,
-                        ),
-                    ],
-                },
-            )
+            print("leaving boss_node in supervisor since last response was from some agent with data")
+            return {
+                "messages": [
+                    AIMessage(
+                        supervisor_response.content,
+                        name=SUPERVISOR_NAME,
+                    ),
+                ],
+                "next": END,
+            }
+            # return Command(
+            #     goto=END,
+            #     update={
+            #         "next": END,
+            #         "messages": [
+            #             AIMessage(
+            #                 supervisor_response.content,
+            #                 name=SUPERVISOR_NAME,
+            #             ),
+            #         ],
+            #     },
+            # )
 
         messages = supervisor_prompt_template.invoke(
             {
@@ -105,19 +94,24 @@ def boss_node(state: StockBossState) -> Command:
             }
         )
 
-        response = cast(Router, llm_heavy.with_structured_output(Router).invoke(messages))
+        response = cast(Router, chat_model_heavy.with_structured_output(Router).invoke(messages))
 
         if DEBUG:
             print(f"Got router response {response}")
 
         if not response or not response.next:
-            return Command(
-                goto=END,
-                update={
-                    "next": END,
-                    "messages": [AIMessage("I have encountered an error. Please try again.", name=SUPERVISOR_NAME)],
-                },
-            )
+            print("Leaving boss_node in supervisor due to some error")
+            return {
+                "next": END,
+                "messages": [AIMessage("I have encountered an error. Please try again.", name=SUPERVISOR_NAME)],
+            }
+            # return Command(
+            #     goto=END,
+            #     update={
+            #         "next": END,
+            #         "messages": [AIMessage("I have encountered an error. Please try again.", name=SUPERVISOR_NAME)],
+            # },
+            # )
 
         goto = response.next
         if goto == "FINISH":
@@ -125,11 +119,12 @@ def boss_node(state: StockBossState) -> Command:
             if response.message:
                 finishing_update["messages"] = [AIMessage(response.message, name=SUPERVISOR_NAME)]
 
-            return Command(goto=END, update=finishing_update)
+            print("Leaving boss_node in supervisor since routed to FINISH")
+            return finishing_update
 
-        if DEBUG:
-            print(f"GOING TO {goto}... {response}")
+            # return Command(goto=END, update=finishing_update)
 
+        print(f"Leaving boss_node in supervisor since going to {goto}")
         return Command(
             goto=goto,
             update={
@@ -148,19 +143,22 @@ def boss_node(state: StockBossState) -> Command:
         error_msg = "I encountered an error while processing your query"
         print(error_msg + str(e))
 
-        return Command(
-            goto=END,
-            update={
-                "next": END,
-                "messages": [AIMessage(error_msg, name=SUPERVISOR_NAME)],
-            },
-        )
+        return {
+            "next": END,
+            "messages": [AIMessage(error_msg, name=SUPERVISOR_NAME)],
+        }
+
+        # return Command(
+        #     goto=END,
+        #     update={
+        #         "next": END,
+        #         "messages": [AIMessage(error_msg, name=SUPERVISOR_NAME)],
+        #     },
+        # )
 
 
 def call_stock_agent(state: StockBossState) -> dict:
-    # if DEBUG:
-    # print("ENTERING Stock Agent Handler with state:")
-    # pprint(state)
+    print("Entering call_stock_agent in supervisor")
 
     try:
         send: Send = cast(Send, state["next"])
@@ -176,11 +174,13 @@ def call_stock_agent(state: StockBossState) -> dict:
         summary = stock_result["stock_summary"]
         if stock_result.get("stock_data") is None or summary is None:
             error_msg = "I couldn't find any stock data. Could you please provide a valid stock symbol or company name?"
+            print(error_msg)
             return {
                 "next": SUPERVISOR_NAME,
                 "messages": [AIMessage(error_msg, name=STOCK_AGENT_NAME)],
             }
 
+        print("Leaving call_stock_agent with data")
         return {
             "stock_data": stock_result["stock_data"],
             "stock_summary": stock_result["stock_summary"],
@@ -201,10 +201,7 @@ def call_stock_agent(state: StockBossState) -> dict:
 
 
 def call_search_agent(state: StockBossState) -> dict:
-    # if DEBUG:
-    # print("ENTERING Search Agent Handler with state:")
-    # pprint(state)
-
+    print("Entering call_search_agent in supervisor")
     try:
         send: Send = cast(Send, state["next"])
         search_state: SearchAgentState = {
@@ -222,11 +219,13 @@ def call_search_agent(state: StockBossState) -> dict:
         summary = search_result["search_summary"]
         if search_result.get("search_query") is None or not results or not summary:
             error_msg = "I couldn't find any search results. Could you ask something more specific?"
+            print(error_msg)
             return {
                 "next": SUPERVISOR_NAME,
                 "messages": [AIMessage(error_msg, name=SEARCH_AGENT_NAME)],
             }
 
+        print("Leaving call_search_agent with data")
         return {
             "next": SUPERVISOR_NAME,
             "search_query": search_result["search_query"],
@@ -250,7 +249,7 @@ boss = (
     .add_node(
         SUPERVISOR_NAME,
         boss_node,
-        destinations=(STOCK_AGENT_NAME,),
+        destinations=(STOCK_AGENT_NAME, END),
     )
     .add_node(
         STOCK_AGENT_NAME,

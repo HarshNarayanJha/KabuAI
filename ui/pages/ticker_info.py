@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from collections.abc import Iterator
 
@@ -11,8 +12,10 @@ from utils.prompt import SYSTEM_PROMPT
 from constants.agents import SUPERVISOR_NAME
 from models.api import APIState, Message, Request, Response
 
-URL = "http://localhost:8000/chat"
+URL = os.getenv("API_URL", "")
 HEADERS = {"Content-Type": "application/json"}
+
+INITIAL_MESSAGE = os.getenv("INITIAL_MESSAGE", "Hey! I am KabuAI. How can I help you today?")
 
 # st.html(
 #     """
@@ -63,7 +66,7 @@ initial_state = APIState(
     next="",
     messages=[
         Message(type="system", content=SYSTEM_PROMPT),
-        Message(type="ai", content="Hey! I am KabuAI. How can I help you today?", name=SUPERVISOR_NAME),
+        Message(type="ai", content=INITIAL_MESSAGE, name=SUPERVISOR_NAME),
     ],
     ticker=None,
     stock_data=None,
@@ -124,6 +127,8 @@ if (
                                 continue
 
                             if data.arguments.get("next") == "FINISH":
+                                # grab and show the message, that is the AI response
+                                message_placeholder.markdown(escape_markdown(data.arguments["message"]) + "| ")
                                 continue
 
                             with handoff_section.expander("Delegating Task"):

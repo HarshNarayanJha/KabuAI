@@ -50,7 +50,7 @@ GENERAL INFO:
  - Today's date is {today}
 
 Remember: Your role is to coordinate and manage the conversation flow, not to provide stock information directly. Do not make up facts or hallucinate information.
-"""
+""".strip()
 
 DONE_PROMPT: Final[str] = r"""
 Review the message history and craft a concise, professional one-sentence response that:
@@ -66,7 +66,7 @@ For example, if the last message was a news snippet or stock summary, do NOT add
 just an closing message like "The request information about ... was collected" and ask the user "Do you want me to assist you in anything else?".
 
 Do not use these messages as is. Keep these responses random, but interesting and engaging. But never make up info on your own But never make up info on your own.
-"""
+""".strip()
 
 supervisor_prompt_template: Final[ChatPromptTemplate] = ChatPromptTemplate.from_messages(
     [
@@ -74,12 +74,12 @@ supervisor_prompt_template: Final[ChatPromptTemplate] = ChatPromptTemplate.from_
         MessagesPlaceholder(variable_name="messages"),
         (
             "system",
-            """
+            r"""
             Given the conversation above, who should act next? Or should we FINISH? Pick VERY Carefully! Select one of: {options}.
             Be sure to include a response message to the user.
             This will be read by the end user, so don't include your thoughts or made up information, just an appropriate response message to user's query, while the agent does the work.
-            If not routing to FINISH, be sure to include a brief system prompt for the next agent to act upon.
-            """,
+            If not routing any agent and NOT to FINISH, be sure to include a brief system prompt for the next agent to act upon.
+            """.strip(),
         ),
     ]
 )
