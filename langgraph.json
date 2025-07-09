@@ -1,8 +1,0 @@
-{
-  "dependencies": ["./kabuai"],
-  "graphs": {
-    "boss": "./kabuai/agents/boss.py:boss",
-    "stock": "./kabuai/agents/stock.py:stock_agent"
-  },
-  "env": ".env"
-}

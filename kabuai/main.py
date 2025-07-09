@@ -23,10 +23,18 @@ def invoke_agent(state: StockBossState, callables: list) -> StockBossState:
 
 app = FastAPI()
 
+origin_env = os.getenv("ALLOWED_ORIGINS", "")
+
+origins = [origin.strip() for origin in origin_env.split(",") if origin_env.strip()]
+
+print(f"Allowed Origins: {origins}")
+
 app.add_middleware(
     CORSMiddleware,
-    # allow_origins=["127.0.0.1:5000"],
+    allow_origins=origins,
+    allow_credentials=True,
     allow_methods=["GET", "POST"],
+    allow_headers=["*"],
 )
 
 
