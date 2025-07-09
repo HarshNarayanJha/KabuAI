@@ -85,10 +85,9 @@ which are used by the Streamlit chat frontend to update it's state. This doesn't
 
 ## Usage
 
-Currently, no hosted solution is available, and I am working on it.
-Once deployed, you will be able to access KabuAI through an online chat interface.
+The streamlit app is hosted at [https://kabuai.onrender.com](https://kabuai.onrender.com). You can try it out there. Please don't use it too much since API is rate limited.
 
-For now, refer to the development setup guide below.
+Another way to try out is setup the development environment.
 
 ### Setup
 
@@ -186,8 +185,8 @@ It currently shows handoff events and tool calls, as well as message streaming, 
 
 - Ask Stock Details
 - Know Current and Past Prices
-- Analyze stock data
 - Get latest news
+- Analyze stock data
 
 ## The name
 

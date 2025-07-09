@@ -2,8 +2,4 @@ Make 20 real world queries and test them
 
 Show graphs and histories and more data in streamlit
 
-make those persist on the sidebar
-
 make a next_list instead of next state, to make the supervisor follow a sequence of agents to call
-
-fix certain timeout bugs

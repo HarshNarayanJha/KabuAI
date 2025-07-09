@@ -3,14 +3,19 @@ import logging
 import os
 import re
 from collections.abc import Iterator
+from typing import Any, cast
 
 import humanize
 import requests
 import streamlit as st
 from requests_sse import EventSource, InvalidContentTypeError, InvalidStatusCodeError
+from streamlit.delta_generator import DeltaGenerator
 
 from constants.agents import SUPERVISOR_NAME
 from models.api import APIState, Message, Request, Response
+from models.chat import ChatEntry
+from models.search import SearchResult
+from models.stock import StockData
 from utils.prompt import SYSTEM_PROMPT
 
 URL = os.getenv("API_URL", "")
@@ -66,6 +71,71 @@ def escape_markdown(text: str) -> str:
     return re.sub(r"(?<!\\)\$", r"\\$", text)
 
 
+def draw_tool_call(
+    tool_name: str,
+    tool_args: dict[str, Any] | None,
+    container: DeltaGenerator,
+    spinner: ControlledSpinner | None = None,
+):
+    """
+    Draws a tool call expander in the container.
+    If spinner is passed, inserts and starts the spinner.
+    """
+    container.empty()
+    with container.expander(tool_name, expanded=spinner is not None):
+        st.code(tool_args)
+
+        if spinner is not None:
+            spinner.set_text("Calling tool...")
+            spinner.start()
+
+
+def draw_stock_cards(stock_data: StockData, container: DeltaGenerator):
+    """
+    Draws Stock Price and Market Cap side by side
+    """
+
+    container.empty()
+    with container:
+        col1, col2 = st.columns(2)
+
+        _label = f"**{stock_data.metadata.symbol} _{stock_data.company.longName}_**"
+        _latest_price = f"${stock_data.prices[-1].close:.2f}"
+        _delta = f"{(stock_data.prices[-1].close - stock_data.prices[-1].open):.2f}"
+
+        with col1:
+            st.text("")
+            st.metric(_label, _latest_price, _delta)
+            st.text("")
+
+        _label = f"**{stock_data.metadata.symbol} _Market Capital_**"
+        _market_cap = f"${humanize.intword(stock_data.metadata.market_cap or 'N/A', format='%.3f').title()}"
+        _market_cap_full = f"${humanize.intcomma(stock_data.metadata.market_cap or 'N/A')}"
+
+        with col2:
+            st.text("")
+            st.metric(_label, _market_cap, _market_cap_full, delta_color="off")
+            st.text("")
+
+
+def draw_news_sources(news_sources: list[SearchResult], container: DeltaGenerator):
+    """
+    Draws news sources in a list
+    """
+
+    container.empty()
+    with container.expander("Sources", expanded=True, icon="📃"):
+        for res in news_sources:
+            logger.debug(f"Rendering search results: {res.link}")
+            color = "blue"
+            if res.sentiment_score >= 0.25 and res.confidence >= 0.25:
+                color = "green"
+            elif res.sentiment_score <= -0.25 and res.confidence >= 0.25:
+                color = "orange"
+
+            st.badge(f"{res.source} ({res.link})", icon="🌐", color=color)
+
+
 initial_state = APIState(
     next="",
     messages=[
@@ -82,32 +152,71 @@ initial_state = APIState(
     analysis_score=None,
 )
 
+initial_chat_entries = [
+    ChatEntry(entry_type="message", message=initial_state.messages[-1]),
+]
+
 if "state" not in st.session_state:
     st.session_state.state = initial_state
+
+if "chat_entries" not in st.session_state:
+    st.session_state.chat_entries = initial_chat_entries
 
 if "awaiting_response" not in st.session_state:
     st.session_state.awaiting_response = False
 
-with st.sidebar:
-    st.code(f"AWAITING RESPONSE: {st.session_state.awaiting_response}")
-    st.code(f"NEXT: {st.session_state.state.next}")
-    st.code(f"STOCK TICKER: {st.session_state.state.ticker}")
-    st.code(f"ANALYSIS SCORE: {st.session_state.state.analysis_score}")
+# with st.sidebar:
+#     st.code(f"AWAITING RESPONSE: {st.session_state.awaiting_response}")
+#     st.code(f"NEXT: {st.session_state.state.next}")
+#     st.code(f"STOCK TICKER: {st.session_state.state.ticker}")
+#     st.code(f"ANALYSIS SCORE: {st.session_state.state.analysis_score}")
 
-# Existing messages
-# TODO: also store and render info-graphics
-for msg in st.session_state.state.messages:
-    if msg.type == "ai":
-        st.chat_message("assistant").markdown(escape_markdown(msg.content))
-    elif msg.type == "human":
-        st.chat_message("user").markdown(escape_markdown(msg.content))
+# Existing chat entries
+for entry in cast(list[ChatEntry], st.session_state.chat_entries):
+    match entry.entry_type:
+        case "message":
+            if entry.message is None:
+                continue
+
+            if entry.message.type == "ai":
+                st.chat_message("assistant").markdown(escape_markdown(entry.message.content))
+            elif entry.message.type == "human":
+                st.chat_message("user").markdown(escape_markdown(entry.message.content))
+
+        case "stock_card":
+            if entry.stock_data is None:
+                continue
+
+            with st.chat_message("assistant"):
+                draw_stock_cards(entry.stock_data, st.empty())
+
+        case "news_items":
+            if entry.news_items is None:
+                continue
+
+            with st.chat_message("assistant"):
+                draw_news_sources(entry.news_items, st.empty())
+
+        case "tool":
+            if entry.tool_name is None:
+                continue
+
+            with st.chat_message("assistant"):
+                draw_tool_call(entry.tool_name, entry.tool_args, st.empty())
+
+        case "chart":
+            pass
+
 
 if (
     prompt := st.chat_input("Type your message...", disabled=st.session_state.awaiting_response)
     or st.session_state.awaiting_response
 ):
     if not st.session_state.awaiting_response:
-        st.session_state.state.messages.append(Message(type="human", content=prompt))
+        msg = Message(type="human", content=prompt)
+        st.session_state.state.messages.append(msg)
+        st.session_state.chat_entries.append(ChatEntry(entry_type="message", message=msg))
+
         with st.chat_message("user"):
             st.markdown(escape_markdown(prompt))
         st.session_state.awaiting_response = True
@@ -115,11 +224,10 @@ if (
 
     with st.chat_message("assistant"):
         handoff_spinner = ControlledSpinner("Calling agent...")
+        tool_spinner = ControlledSpinner("Calling tool...")
 
         handoff_section = st.empty()
         tool_section = st.empty()
-
-        tool_spinner = ControlledSpinner("Calling tool...")
 
         stock_placeholder = st.empty()
         sources_placeholder = st.empty()
@@ -153,11 +261,17 @@ if (
                                 st.code(f"Asking {data.arguments.get('next', 'agent')} for help", language=None)
 
                         case "tool":
-                            with tool_section.expander(data.name or "Some Tool", expanded=True):
-                                st.code(data.arguments)
+                            st.session_state.chat_entries.append(
+                                ChatEntry(
+                                    entry_type="tool", tool_name=data.name or "Some Tool", tool_args=data.arguments
+                                )
+                            )
+                            draw_tool_call(data.name or "Some Tool", data.arguments, tool_section, tool_spinner)
+                            # with tool_section.expander(data.name or "Some Tool", expanded=True):
+                            #     st.code(data.arguments)
 
-                                tool_spinner.set_text("Calling tool...")
-                                tool_spinner.start()
+                            #     tool_spinner.set_text("Calling tool...")
+                            #     tool_spinner.start()
 
                         case "update":
                             # handoff_spinner.stop()
@@ -168,6 +282,9 @@ if (
                                     for msg in data.state.messages:
                                         # TODO: use ids to prevent duplicates just in case
                                         st.session_state.state.messages.append(msg)
+                                        st.session_state.chat_entries.append(
+                                            ChatEntry(entry_type="message", message=msg)
+                                        )
                                         message_placeholder.empty()
                                         st.markdown(escape_markdown(msg.content.strip()))
 
@@ -186,32 +303,37 @@ if (
                                     and data.state.stock_data != st.session_state.state.stock_data
                                 ):
                                     st.session_state.state.stock_data = data.state.stock_data
+
                                     if data.state.stock_data.prices:
-                                        stock_placeholder.empty()
-                                        with stock_placeholder:
-                                            col1, col2 = st.columns(2)
+                                        st.session_state.chat_entries.append(
+                                            ChatEntry(entry_type="stock_card", stock_data=data.state.stock_data)
+                                        )
+                                        draw_stock_cards(data.state.stock_data, stock_placeholder)
+                                        # stock_placeholder.empty()
+                                        # with stock_placeholder:
+                                        #     col1, col2 = st.columns(2)
 
-                                            _label = f"**{data.state.stock_data.metadata.symbol} _{data.state.stock_data.company.longName}_**"
-                                            _latest_price = f"${data.state.stock_data.prices[-1].close:.2f}"
-                                            _delta = f"{
-                                                (
-                                                    data.state.stock_data.prices[-1].close
-                                                    - data.state.stock_data.prices[-1].open
-                                                ):.2f}"
+                                        #     _label = f"**{data.state.stock_data.metadata.symbol} _{data.state.stock_data.company.longName}_**"
+                                        #     _latest_price = f"${data.state.stock_data.prices[-1].close:.2f}"
+                                        #     _delta = f"{
+                                        #         (
+                                        #             data.state.stock_data.prices[-1].close
+                                        #             - data.state.stock_data.prices[-1].open
+                                        #         ):.2f}"
 
-                                            with col1:
-                                                st.text("")
-                                                st.metric(_label, _latest_price, _delta)
-                                                st.text("")
+                                        #     with col1:
+                                        #         st.text("")
+                                        #         st.metric(_label, _latest_price, _delta)
+                                        #         st.text("")
 
-                                            _label = f"**{data.state.stock_data.metadata.symbol} _Market Capital_**"
-                                            _market_cap = f"${humanize.intword(data.state.stock_data.metadata.market_cap or 'N/A', format='%.3f').title()}"
-                                            _market_cap_full = f"${humanize.intcomma(data.state.stock_data.metadata.market_cap or 'N/A')}"
+                                        #     _label = f"**{data.state.stock_data.metadata.symbol} _Market Capital_**"
+                                        #     _market_cap = f"${humanize.intword(data.state.stock_data.metadata.market_cap or 'N/A', format='%.3f').title()}"
+                                        #     _market_cap_full = f"${humanize.intcomma(data.state.stock_data.metadata.market_cap or 'N/A')}"
 
-                                            with col2:
-                                                st.text("")
-                                                st.metric(_label, _market_cap, _market_cap_full, delta_color="off")
-                                                st.text("")
+                                        #     with col2:
+                                        #         st.text("")
+                                        #         st.metric(_label, _market_cap, _market_cap_full, delta_color="off")
+                                        #         st.text("")
 
                                 if data.state.stock_summary is not None:
                                     st.session_state.state.stock_summary = data.state.stock_summary
@@ -223,18 +345,41 @@ if (
                                     data.state.search_results
                                     and data.state.search_results != st.session_state.state.search_results
                                 ):
-                                    st.session_state.state.search_results = data.state.search_results
-                                    sources_placeholder.empty()
-                                    with sources_placeholder.expander("Sources", expanded=True, icon="📃"):
-                                        for res in data.state.search_results:
-                                            logger.debug(f"Rendering search results: {res.link}")
-                                            color = "blue"
-                                            if res.sentiment_score >= 0.25 and res.confidence >= 0.25:
-                                                color = "green"
-                                            elif res.sentiment_score <= -0.25 and res.confidence >= 0.25:
-                                                color = "orange"
+                                    # TODO:
+                                    # needs a better way to identify same news list update
+                                    # probably the same search query to be included in the results itself
+                                    if (
+                                        st.session_state.state.search_results
+                                        and st.session_state.state.search_results[0].title
+                                        == data.state.search_results[0].title
+                                        and st.session_state.state.search_results[0].link
+                                        == data.state.search_results[0].link
+                                    ):
+                                        # same is being updated with sentiment scores
+                                        # remove the last news item
+                                        st.session_state.chat_entries = [
+                                            chat_entry
+                                            for chat_entry in st.session_state.chat_entries
+                                            if chat_entry.news_items != st.session_state.state.search_results
+                                        ]
 
-                                            st.badge(f"{res.source} ({res.link})", icon="🌐", color=color)
+                                    st.session_state.state.search_results = data.state.search_results
+                                    st.session_state.chat_entries.append(
+                                        ChatEntry(entry_type="news_items", news_items=data.state.search_results)
+                                    )
+                                    draw_news_sources(data.state.search_results, sources_placeholder)
+
+                                    # sources_placeholder.empty()
+                                    # with sources_placeholder.expander("Sources", expanded=True, icon="📃"):
+                                    #     for res in data.state.search_results:
+                                    #         logger.debug(f"Rendering search results: {res.link}")
+                                    #         color = "blue"
+                                    #         if res.sentiment_score >= 0.25 and res.confidence >= 0.25:
+                                    #             color = "green"
+                                    #         elif res.sentiment_score <= -0.25 and res.confidence >= 0.25:
+                                    #             color = "orange"
+
+                                    #         st.badge(f"{res.source} ({res.link})", icon="🌐", color=color)
 
                                 if data.state.search_summary is not None:
                                     st.session_state.state.search_summary = data.state.search_summary
