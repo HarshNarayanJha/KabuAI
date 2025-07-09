@@ -150,6 +150,7 @@ and fill in the environment variables
 - `TEMPERATURE`: Temperature to use for the LLM calls.
 
 - `ALLOWED_ORIGINS`: CORS allowed origins, separated by commas. Example: "http://localhost:8501,http://127.0.0.1:8501"
+- `PORT`: Port to run the server on.
 
 And for the UI
 
