@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from typing import NamedTuple, cast
 
@@ -8,6 +9,8 @@ from pandas import Timestamp
 from pydantic import BaseModel, Field
 
 from models.stock import CompanyDetails, CompanyOfficer, Financials, News, StockData, StockMetadata, StockPrice
+
+logger = logging.getLogger(__name__)
 
 
 class HistoryRow(NamedTuple):
@@ -22,7 +25,7 @@ class HistoryRow(NamedTuple):
 
 
 def search_stock(query: str) -> yf.Ticker:
-    print(f"Search Stock called with query: {query}")
+    logger.debug(f"Search Stock called with query: {query}")
     results = yf.Search(query)
     if not results.quotes:
         raise Exception(f"No stock found with the following query {query}")
@@ -48,7 +51,7 @@ def fetch_stock_details(ticker_or_name: str) -> StockData | str:
         StockData | str: An object containing the stock details or an error message.
     """
 
-    print(f"Fetch stock details tool used {ticker_or_name}")
+    logger.debug(f"Fetch stock details tool used {ticker_or_name}")
 
     try:
         data = yf.Ticker(ticker_or_name)
@@ -60,10 +63,10 @@ def fetch_stock_details(ticker_or_name: str) -> StockData | str:
         try:
             data = search_stock(query=ticker_or_name)
         except Exception as e:
-            print(f"Failed to fetch stock details. Error: {e}")
+            logger.error(f"Failed to fetch stock details. Error: {e}")
             raise
     except Exception as e:
-        print(f"Failed to fetch stock details. Error: {e}")
+        logger.error(f"Failed to fetch stock details. Error: {e}")
         raise
 
     # --- Metadata ---
@@ -172,7 +175,7 @@ def fetch_stock_details(ticker_or_name: str) -> StockData | str:
         for n in data.news[:5]
     ]
 
-    print("Stock details fetch complete")
+    logger.debug("Stock details fetch complete")
 
     return StockData(company=company_details, metadata=metadata, prices=prices, financials=financials, news=news)
 

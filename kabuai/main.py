@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from pprint import pprint
 from typing import Any, cast
@@ -13,6 +14,7 @@ from agents.boss import boss
 from constants.agents import ANALYZER_AGENT_NAME, SEARCH_AGENT_NAME, STOCK_AGENT_NAME, SUPERVISOR_NAME
 from graph.boss_state import StockBossState
 from models.api import Request, Response
+from utils.logger import setup_logging
 
 DEBUG = os.getenv("DEBUG", "0") == "1"
 
@@ -21,13 +23,16 @@ def invoke_agent(state: StockBossState, callables: list) -> StockBossState:
     return cast(StockBossState, boss.invoke(state, config={"callbacks": callables, "configurable": {"thread_id": "1"}}))
 
 
+setup_logging()
+logger = logging.getLogger(__name__)
+logger.info(f"Starting with DEBUG: {DEBUG}")
+
 app = FastAPI()
 
 origin_env = os.getenv("ALLOWED_ORIGINS", "")
-
 origins = [origin.strip() for origin in origin_env.split(",") if origin_env.strip()]
 
-print(f"Allowed Origins: {origins}")
+logger.info(f"Allowed Origins: {origins}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -39,6 +44,7 @@ app.add_middleware(
 
 
 def sse_format(payload: Response) -> str:
+    logger.info(f"Yielding {payload.type}")
     return f"data: {payload.model_dump_json(exclude_unset=True)}\n\n"
 
 
@@ -68,18 +74,18 @@ async def chat(request: Request) -> StreamingResponse:
     }
 
     async def stream_generator():
-        # we are streaming both modes
+        # we are streaming these modes
         # messages -> to get chunk by chunk streaming messages
         # updates -> for tool calls and state updates
+        # tasks -> for context changes
 
         async for namespace, mode, data in boss.astream(
             state, stream_mode=["messages", "updates", "tasks"], subgraphs=True
         ):
-            # if DEBUG:
-            pprint(namespace)
-            pprint(mode)
-            pprint(data)
-            print()
+            logger.debug(namespace)
+            logger.debug(mode)
+            logger.debug(data)
+            logger.debug("---")
 
             if mode == "messages":
                 token, metadata = cast(tuple[AnyMessage, dict[str, Any]], data)

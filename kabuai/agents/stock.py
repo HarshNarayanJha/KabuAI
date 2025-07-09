@@ -1,3 +1,4 @@
+import logging
 import os
 from pprint import pprint
 from typing import Literal, cast
@@ -18,6 +19,9 @@ from tools.stock import fetch_stock_details
 DEBUG = os.getenv("DEBUG", "0") == "1"
 SUMMARY_LENGTH: Literal["short", "medium", "long"] = "medium"
 
+logger = logging.getLogger(__name__)
+logger.info(f"SUMMARY_LENGTH set to {SUMMARY_LENGTH}")
+
 
 class StockDetailsResponseFormat(BaseModel):
     ticker_or_name: str | None = Field(description="Ticker symbol of the stock or the company name.")
@@ -28,7 +32,7 @@ def stock_details_node(state: StockAgentState) -> dict | Command:
     Process stock details request.
     """
 
-    print("Entering stock_details_node in stock agent")
+    logger.debug("Entering stock_details_node in stock agent")
     try:
         messages = [
             SystemMessage(fetch_prompt),
@@ -40,12 +44,11 @@ def stock_details_node(state: StockAgentState) -> dict | Command:
             chat_model_heavy.with_structured_output(StockDetailsResponseFormat).invoke(messages),
         )
 
-        if DEBUG:
-            print("TickerResponse:", ticker_response.ticker_or_name)
+        logger.debug("TickerResponse:", ticker_response.ticker_or_name)
 
         if not ticker_response or not ticker_response.ticker_or_name:
             err = f"Did not get a valid ticker response: {ticker_response}"
-            print(f"ERROR: {err}")
+            logger.error(f"ERROR: {err}")
             return Command(
                 goto=SUPERVISOR_NAME,
                 update={
@@ -56,15 +59,18 @@ def stock_details_node(state: StockAgentState) -> dict | Command:
                 graph=Command.PARENT,
             )
 
-        if state["ticker"] == ticker_response.ticker_or_name:
+        if state["stock_data"] and (
+            state["ticker"] == ticker_response.ticker_or_name
+            or ticker_response.ticker_or_name in state["stock_data"].company.longName
+        ):
             # same ticker, we already have that data, no need to fetch
-            print("Leaving stock_details_node since ticker is the same")
+            logger.debug("Leaving stock_details_node since ticker is the same")
             return {}
 
         response: StockData | None = fetch_stock_details.invoke(ticker_response.ticker_or_name)
         if not response:
             err = "Unable to fetch stock data. Please try again"
-            print(f"ERROR: {err}")
+            logger.error(f"ERROR: {err}")
             return Command(
                 goto=SUPERVISOR_NAME,
                 update={
@@ -76,7 +82,7 @@ def stock_details_node(state: StockAgentState) -> dict | Command:
                 graph=Command.PARENT,
             )
 
-        print("leaving stock_details_node with data")
+        logger.debug("leaving stock_details_node with data")
         return {
             "ticker": response.metadata.symbol,
             "stock_data": response,
@@ -84,7 +90,7 @@ def stock_details_node(state: StockAgentState) -> dict | Command:
 
     except Exception as e:
         err = "I encountered an error while fetching stock details"
-        print(f"ERROR in stock_details NODE: {e}")
+        logger.error(f"ERROR in stock_details NODE: {e}")
         return Command(
             goto=SUPERVISOR_NAME,
             update={
@@ -102,16 +108,16 @@ def stock_summary_node(state: StockAgentState) -> dict | Command:
     Summarize stock data.
     """
 
-    print("Entering stock_summary_node in stock agent")
+    logger.debug("Entering stock_summary_node in stock agent")
     try:
         ticker = state["ticker"]
         stock_data = state["stock_data"]
         if not ticker:
-            print("Leaving stock_summary_node since no ticker")
+            logger.debug("Leaving stock_summary_node since no ticker")
             return {"stock_summary": None}
 
         if not stock_data:
-            print("Leaving stock_summary_node since no stock data")
+            logger.debug("Leaving stock_summary_node since no stock data")
             return {"stock_summary": f"No stock data available for {state['ticker']}"}
 
         messages = [
@@ -127,7 +133,7 @@ def stock_summary_node(state: StockAgentState) -> dict | Command:
         response = chat_model.invoke(messages)
         if not response:
             err = "Unable to summarize stock data. Please try again"
-            print(f"ERROR: {err}")
+            logger.error(f"ERROR: {err}")
             return Command(
                 goto=SUPERVISOR_NAME,
                 update={
@@ -137,12 +143,12 @@ def stock_summary_node(state: StockAgentState) -> dict | Command:
                 graph=Command.PARENT,
             )
 
-        print("Leaving stock_summary_node with data")
+        logger.debug("Leaving stock_summary_node with data")
         return {"stock_summary": str(response.content)}
 
     except Exception as e:
         err = "I'm sorry, but I encountered an error while generating the stock summary"
-        print(f"ERROR in stock_summary NODE: {e}")
+        logger.error(f"ERROR in stock_summary NODE: {e}")
         return Command(
             goto=SUPERVISOR_NAME,
             update={"messages": [AIMessage(content=err, name=STOCK_AGENT_NAME)], "stock_summary": None},

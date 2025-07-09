@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from pprint import pprint
 from typing import Literal, cast
@@ -20,6 +21,9 @@ from utils.search import calculate_overall_sentiment_score
 DEBUG = os.getenv("DEBUG", "0") == "1"
 SUMMARY_LENGTH: Literal["short", "medium", "long"] = "medium"
 
+logger = logging.getLogger(__name__)
+logger.info(f"SUMMARY_LENGTH set to {SUMMARY_LENGTH}")
+
 
 class AnalysisResponseFormat(BaseModel):
     analysis_result: str = Field(description="Detailed analysis result")
@@ -34,7 +38,7 @@ def perform_analysis_node(state: AnalyzerAgentState) -> dict | Command:
     Performs stock analysis based on the provided data
     """
 
-    print("Entering perform_analysis_node in analyzer agent")
+    logger.debug("Entering perform_analysis_node in analyzer agent")
     try:
         if (
             not state["stock_data"]
@@ -43,9 +47,9 @@ def perform_analysis_node(state: AnalyzerAgentState) -> dict | Command:
             or not state["search_results"]
             or not state["search_summary"]
         ):
-            print("Leaving perform_analysis_node since missing data")
+            logger.debug("Leaving perform_analysis_node since missing data")
             err = "Some of the required data was not provided. Please provide me the latest data."
-            print(err)
+            logger.error(err)
             return Command(
                 goto=SUPERVISOR_NAME,
                 update={
@@ -80,13 +84,12 @@ def perform_analysis_node(state: AnalyzerAgentState) -> dict | Command:
 
         analysis_response = sub_agent.invoke(messages)
 
-        if DEBUG:
-            print(f"Analysis Response: {analysis_response}")
+        logger.debug(f"Analysis Response: {analysis_response}")
 
         # return to supervisor
         if not analysis_response or not analysis_response["structured_response"]:
             err = "I was unable to perform analysis"
-            print(err)
+            logger.error(err)
             return Command(
                 goto=SUPERVISOR_NAME,
                 update={
@@ -99,7 +102,7 @@ def perform_analysis_node(state: AnalyzerAgentState) -> dict | Command:
 
         structured_response: AnalysisResponseFormat = analysis_response["structured_response"]
 
-        print("Leaving perform_analysis_node")
+        logger.debug("Leaving perform_analysis_node")
         return {
             "analysis_result": structured_response.analysis_result,
             "analysis_score": structured_response.analysis_score,
@@ -107,7 +110,7 @@ def perform_analysis_node(state: AnalyzerAgentState) -> dict | Command:
 
     except Exception as e:
         err = "I'm sorry, but I encountered an error while analyzing the data"
-        print(f"ERROR in perform_analysis_node: {e}")
+        logger.error(f"ERROR in perform_analysis_node: {e}")
         return Command(
             goto=SUPERVISOR_NAME,
             update={

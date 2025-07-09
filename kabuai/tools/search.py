@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import Literal
 
 from langchain_community.tools import DuckDuckGoSearchResults
@@ -6,6 +7,8 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from models.search import SearchResult
+
+logger = logging.getLogger(__name__)
 
 
 class SearchWebInput(BaseModel):
@@ -34,7 +37,7 @@ def search_web(query: str, what: Literal["news", "text"] = "news") -> list[Searc
         results = [SearchResult(**x) for x in json.loads(results)]
         return results
     except Exception as e:
-        print(f"Failed to call the search_web tool: {e}")
+        logger.error(f"Failed to call the search_web tool: {e}")
         return []
 
 

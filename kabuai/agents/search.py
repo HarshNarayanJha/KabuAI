@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from pprint import pprint
 from typing import cast
@@ -17,6 +18,8 @@ from tools.search import search_web
 
 DEBUG = os.getenv("DEBUG", "0") == "1"
 
+logger = logging.getLogger(__name__)
+
 
 class SearchQueryResponseFormat(BaseModel):
     query: str = Field(description="Query to search for. Must be 3-5 words")
@@ -27,7 +30,7 @@ def search_news_node(state: SearchAgentState) -> dict | Command:
     Searches the web based on the system instruction and user's query
     """
 
-    print("Entering search_news_node in search agent")
+    logger.debug("Entering search_news_node in search agent")
     try:
         messages = [
             SystemMessage(search_prompt.format(ticker=state["ticker"], stock_summary=state["stock_summary"])),
@@ -38,13 +41,12 @@ def search_news_node(state: SearchAgentState) -> dict | Command:
             SearchQueryResponseFormat, chat_model.with_structured_output(SearchQueryResponseFormat).invoke(messages)
         )
 
-        if DEBUG:
-            print(f"Query Response: {query_response}")
+        logger.debug(f"Query Response: {query_response}")
 
         # return to supervisor
         if not query_response or not query_response.query:
             err = "I was unable to generate a search query"
-            print(err)
+            logger.error(err)
             return Command(
                 goto=SUPERVISOR_NAME,
                 update={
@@ -57,13 +59,12 @@ def search_news_node(state: SearchAgentState) -> dict | Command:
 
         response = search_web.invoke({"query": query_response.query, "what": "news"})
 
-        print("Leaving search_news_node")
-        # continue to sentiment node
+        logger.debug("Leaving search_news_node")
         return {"search_query": query_response.query, "search_results": response}
 
     except Exception as e:
         err = "I'm sorry, but I encountered an error while searching for news"
-        print(f"ERROR in search_news NODE: {e}")
+        logger.error(f"ERROR in search_news NODE: {e}")
         return Command(
             goto=SUPERVISOR_NAME,
             update={
@@ -85,10 +86,10 @@ def sentiment_news_node(state: SearchAgentState) -> dict | Command:
     Performs Sentiment Analysis on the search results
     """
 
-    print("Entering sentiment_news_node in search agent")
+    logger.debug("Entering sentiment_news_node in search agent")
     try:
         if not state["search_results"]:
-            print("Leaving sentiment_news_node since no search results")
+            logger.debug("Leaving sentiment_news_node since no search results")
             return {}
 
         messages = [
@@ -103,16 +104,14 @@ def sentiment_news_node(state: SearchAgentState) -> dict | Command:
             ),
         ]
 
-        if DEBUG:
-            print(f"Asking for sentiment scores with messages: {messages}")
+        logger.debug(f"Asking for sentiment scores with messages: {messages}")
 
         response = cast(
             SentimentResultsResponseFormat,
             chat_model_light.with_structured_output(SentimentResultsResponseFormat).invoke(messages),
         )
 
-        if DEBUG:
-            print(f"GOT response in sentiment_news NODE: {response}")
+        logger.debug(f"GOT response in sentiment_news NODE: {response}")
 
         # if there is any kind of mistake in the response, empty or lengths do not match, or values out of range
         if (
@@ -125,7 +124,7 @@ def sentiment_news_node(state: SearchAgentState) -> dict | Command:
             or any([x > 1 or x < 0 for x in response.confidence_scores])
         ):
             err = "I was unable to generate sentiment scores"
-            print(err)
+            logger.error(err)
             return Command(
                 goto=SUPERVISOR_NAME,
                 update={
@@ -143,12 +142,12 @@ def sentiment_news_node(state: SearchAgentState) -> dict | Command:
 
             updated_search_results.append(mod_result)
 
-        print("Leaving sentiment_news_node")
+        logger.debug("Leaving sentiment_news_node")
         return {"search_results": updated_search_results}
 
     except Exception as e:
         err = "I'm sorry, but I encountered an error while analyzing sentiment"
-        print(f"ERROR in sentiment_news NODE: {e}")
+        logger.error(f"ERROR in sentiment_news NODE: {e}")
         return Command(
             goto=SUPERVISOR_NAME,
             update={
@@ -163,10 +162,10 @@ def news_summary_node(state: SearchAgentState) -> dict | Command:
     Summarizes the search results to answer user's initial query.
     """
 
-    print("Entering news_summary_node in search agent")
+    logger.debug("Entering news_summary_node in search agent")
     try:
         if not state["search_results"]:
-            print("Leaving news_summary_node since no search results")
+            logger.debug("Leaving news_summary_node since no search results")
             return {}
 
         messages = summary_prompt_template.invoke(
@@ -181,17 +180,15 @@ def news_summary_node(state: SearchAgentState) -> dict | Command:
             }
         )
 
-        if DEBUG:
-            print(f"Asking for news summary with messages: {messages}")
+        logger.debug(f"Asking for news summary with messages: {messages}")
 
         response = llm.invoke(messages)
 
-        if DEBUG:
-            print(f"GOT response in news_summary NODE: {response}")
+        logger.debug(f"GOT response in news_summary NODE: {response}")
 
         if not response:  # or not response.content:
             err = "I was unable to generate the answer."
-            print(err)
+            logger.error(err)
             return Command(
                 goto=SUPERVISOR_NAME,
                 update={
@@ -201,13 +198,12 @@ def news_summary_node(state: SearchAgentState) -> dict | Command:
                 graph=Command.PARENT,
             )
 
-        print("Leaving news_summary_node in search agent")
-        # return {"search_summary": response.content}
+        logger.debug("Leaving news_summary_node in search agent")
         return {"search_summary": response}
 
     except Exception as e:
         err = "I'm sorry, but I encountered an error while summarizing news"
-        print(f"ERROR in news_summary NODE: {e}")
+        logger.error(f"ERROR in news_summary NODE: {e}")
         return Command(
             goto=SUPERVISOR_NAME,
             update={

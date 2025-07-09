@@ -6,4 +6,4 @@ make those persist on the sidebar
 
 make a next_list instead of next state, to make the supervisor follow a sequence of agents to call
 
-use async if required
+fix certain timeout bugs

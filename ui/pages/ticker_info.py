@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 from collections.abc import Iterator
@@ -16,6 +17,9 @@ URL = os.getenv("API_URL", "")
 HEADERS = {"Content-Type": "application/json"}
 
 INITIAL_MESSAGE = os.getenv("INITIAL_MESSAGE", "Hey! I am KabuAI. How can I help you today?")
+
+logger = logging.getLogger(__name__)
+
 
 # st.html(
 #     """
@@ -84,7 +88,14 @@ if "state" not in st.session_state:
 if "awaiting_response" not in st.session_state:
     st.session_state.awaiting_response = False
 
+with st.sidebar:
+    st.code(f"AWAITING RESPONSE: {st.session_state.awaiting_response}")
+    st.code(f"NEXT: {st.session_state.state.next}")
+    st.code(f"STOCK TICKER: {st.session_state.state.ticker}")
+    st.code(f"ANALYSIS SCORE: {st.session_state.state.analysis_score}")
+
 # Existing messages
+# TODO: also store and render info-graphics
 for msg in st.session_state.state.messages:
     if msg.type == "ai":
         st.chat_message("assistant").markdown(escape_markdown(msg.content))
@@ -93,13 +104,14 @@ for msg in st.session_state.state.messages:
 
 if (
     prompt := st.chat_input("Type your message...", disabled=st.session_state.awaiting_response)
-) and not st.session_state.awaiting_response:
-    st.session_state.awaiting_response = True
-
-    st.session_state.state.messages.append(Message(type="human", content=prompt))
-
-    with st.chat_message("user"):
-        st.markdown(escape_markdown(prompt))
+    or st.session_state.awaiting_response
+):
+    if not st.session_state.awaiting_response:
+        st.session_state.state.messages.append(Message(type="human", content=prompt))
+        with st.chat_message("user"):
+            st.markdown(escape_markdown(prompt))
+        st.session_state.awaiting_response = True
+        st.rerun()
 
     with st.chat_message("assistant"):
         handoff_section = st.empty()
@@ -114,7 +126,7 @@ if (
         message_placeholder = st.empty()
         full_response = ""
 
-        # print(f"Posting data to server: {st.session_state.state}")
+        logger.debug(f"Posting data to server: {st.session_state.state}")
         state = Request(state=st.session_state.state).model_dump_json()
 
         with EventSource(URL, method="POST", headers=HEADERS, data=state, timeout=30) as event_source:
@@ -122,7 +134,7 @@ if (
                 for event in event_source:
                     data = Response(**json.loads(event.data or "{}"))
 
-                    print(f"GOT DATA: {data}")
+                    logger.debug(f"GOT DATA: {data}")
                     match data.type:
                         case "handoff":
                             if data.arguments is None:
@@ -214,7 +226,7 @@ if (
                                     sources_placeholder.empty()
                                     with sources_placeholder.expander("Sources", expanded=True, icon="📃"):
                                         for res in data.state.search_results:
-                                            print(f"Rendering search results: {res.link}")
+                                            logger.debug(f"Rendering search results: {res.link}")
                                             color = "blue"
                                             if res.sentiment_score >= 0.25 and res.confidence >= 0.25:
                                                 color = "green"
@@ -243,19 +255,24 @@ if (
 
                         case "task":
                             # Not of any use right now, will use
-                            print(f"Task update: {data.direction} -> {data.name}")
+                            logger.debug(f"Task update: {data.direction} -> {data.name}")
 
             except InvalidStatusCodeError as e:
                 st.error(f"Error: Invalid Status Code {e.status_code}")
+                logger.error(f"Invalid Status Code: {e.status_code}")
                 st.stop()
             except InvalidContentTypeError as e:
                 st.error(f"Error: Invalid Content Type: {e.content_type}")
+                logger.error(f"Invalid Content Type: {e.content_type}")
                 st.stop()
             except requests.RequestException as e:
                 st.error(f"Network error: {e}")
+                logger.error(f"Network error: {e}")
                 st.stop()
             finally:
                 handoff_spinner.stop()
                 tool_spinner.stop()
                 message_placeholder.empty()
-                st.session_state.awaiting_response = False
+
+    st.session_state.awaiting_response = False
+    st.rerun()

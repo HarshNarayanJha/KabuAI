@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import datetime
 from pprint import pprint
@@ -27,6 +28,8 @@ DEBUG = os.getenv("DEBUG", "0") == "1"
 checkpointer = InMemorySaver()
 OPTIONS = MEMBERS + ["FINISH"]
 
+logger = logging.getLogger(__name__)
+
 
 class Router(BaseModel):
     next: Literal["stock_agent", "search_agent", "analyzer_agent", "FINISH"] = Field(
@@ -37,9 +40,10 @@ class Router(BaseModel):
 
 
 def boss_node(state: StockBossState) -> Command | dict:
-    print("Entering boss_node in supervisor")
+    logging.debug("Entering boss_node in supervisor")
 
     try:
+        # TODO: use a next array for this
         # Let's check if we already have the summary
         # In the final version we will check for the final verdict
         last_message = state["messages"][-1] if state["messages"] else None
@@ -69,7 +73,7 @@ def boss_node(state: StockBossState) -> Command | dict:
             supervisor_response = chat_model.invoke(prompt.invoke({"messages": state["messages"]}))
 
             # completed
-            print("leaving boss_node in supervisor since last response was from some agent with data")
+            logger.debug("leaving boss_node in supervisor since last response was from some agent with data")
             return {
                 "messages": [
                     AIMessage(
@@ -91,11 +95,10 @@ def boss_node(state: StockBossState) -> Command | dict:
 
         response = cast(Router, chat_model_heavy.with_structured_output(Router).invoke(messages))
 
-        if DEBUG:
-            print(f"Got router response {response}")
+        logger.debug(f"Got router response {response}")
 
         if not response or not response.next:
-            print("Leaving boss_node in supervisor due to some error")
+            logger.debug("Leaving boss_node in supervisor due to some error")
             return {
                 "next": END,
                 "messages": [AIMessage("I have encountered an error. Please try again.", name=SUPERVISOR_NAME)],
@@ -107,10 +110,10 @@ def boss_node(state: StockBossState) -> Command | dict:
             if response.message:
                 finishing_update["messages"] = [AIMessage(response.message, name=SUPERVISOR_NAME)]
 
-            print("Leaving boss_node in supervisor since routed to FINISH")
+            logger.debug("Leaving boss_node in supervisor since routed to FINISH")
             return finishing_update
 
-        print(f"Leaving boss_node in supervisor since going to {goto}")
+        logger.debug(f"Leaving boss_node in supervisor since going to {goto}")
         return Command(
             goto=goto,
             update={
@@ -127,7 +130,7 @@ def boss_node(state: StockBossState) -> Command | dict:
         )
     except Exception as e:
         error_msg = "I encountered an error while processing your query"
-        print(error_msg + str(e))
+        logger.error(error_msg + str(e))
 
         return {
             "next": END,
@@ -136,7 +139,7 @@ def boss_node(state: StockBossState) -> Command | dict:
 
 
 def call_stock_agent(state: StockBossState) -> dict:
-    print("Entering call_stock_agent in supervisor")
+    logger.debug("Entering call_stock_agent in supervisor")
 
     try:
         send: Send = cast(Send, state["next"])
@@ -152,13 +155,13 @@ def call_stock_agent(state: StockBossState) -> dict:
         summary = stock_result["stock_summary"]
         if stock_result.get("stock_data") is None or summary is None:
             error_msg = "I couldn't find any stock data. Could you please provide a valid stock symbol or company name?"
-            print(error_msg)
+            logger.error(error_msg)
             return {
                 "next": SUPERVISOR_NAME,
                 "messages": [AIMessage(error_msg, name=STOCK_AGENT_NAME)],
             }
 
-        print("Leaving call_stock_agent with data")
+        logger.debug("Leaving call_stock_agent with data")
         return {
             "stock_data": stock_result["stock_data"],
             "stock_summary": stock_result["stock_summary"],
@@ -169,8 +172,7 @@ def call_stock_agent(state: StockBossState) -> dict:
 
     except Exception as e:
         error_msg = "I encountered an error while fetching stock information"
-        if DEBUG:
-            print(error_msg + str(e))
+        logger.error(error_msg + str(e))
 
         return {
             "next": SUPERVISOR_NAME,
@@ -179,7 +181,7 @@ def call_stock_agent(state: StockBossState) -> dict:
 
 
 def call_search_agent(state: StockBossState) -> dict:
-    print("Entering call_search_agent in supervisor")
+    logger.debug("Entering call_search_agent in supervisor")
     try:
         send: Send = cast(Send, state["next"])
         search_state: SearchAgentState = {
@@ -197,13 +199,13 @@ def call_search_agent(state: StockBossState) -> dict:
         summary = search_result["search_summary"]
         if search_result.get("search_query") is None or not results or not summary:
             error_msg = "I couldn't find any search results. Could you ask something more specific?"
-            print(error_msg)
+            logger.error(error_msg)
             return {
                 "next": SUPERVISOR_NAME,
                 "messages": [AIMessage(error_msg, name=SEARCH_AGENT_NAME)],
             }
 
-        print("Leaving call_search_agent with data")
+        logger.debug("Leaving call_search_agent with data")
         return {
             "next": SUPERVISOR_NAME,
             "search_query": search_result["search_query"],
@@ -214,7 +216,7 @@ def call_search_agent(state: StockBossState) -> dict:
 
     except Exception as e:
         error_msg = "I encountered an error while fetching search information"
-        print(error_msg + str(e))
+        logger.error(error_msg + str(e))
 
         return {
             "next": SUPERVISOR_NAME,
@@ -223,7 +225,7 @@ def call_search_agent(state: StockBossState) -> dict:
 
 
 def call_analyzer_agent(state: StockBossState) -> dict:
-    print("Entering analyzer_agent in supervisor")
+    logger.debug("Entering analyzer_agent in supervisor")
     try:
         send: Send = cast(Send, state["next"])
         analyzer_state: AnalyzerAgentState = {
@@ -242,13 +244,13 @@ def call_analyzer_agent(state: StockBossState) -> dict:
         analysis = analysis_result["analysis_result"]
         if not analysis:
             error_msg = "I was unable to analyze the provided data. Could you please try again?"
-            print(error_msg)
+            logger.error(error_msg)
             return {
                 "next": SUPERVISOR_NAME,
                 "messages": [AIMessage(error_msg, name=ANALYZER_AGENT_NAME)],
             }
 
-        print("Leaving analyzer_agent with data")
+        logger.debug("Leaving analyzer_agent with data")
         return {
             "next": SUPERVISOR_NAME,
             "analysis_result": analysis,
@@ -258,7 +260,7 @@ def call_analyzer_agent(state: StockBossState) -> dict:
 
     except Exception as e:
         error_msg = "I encountered an error while fetching search information"
-        print(error_msg + str(e))
+        logger.error(error_msg + str(e))
 
         return {
             "next": SUPERVISOR_NAME,
