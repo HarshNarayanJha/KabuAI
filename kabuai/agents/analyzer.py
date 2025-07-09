@@ -6,9 +6,8 @@ from typing import Literal, cast
 
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph import END, StateGraph
-from langgraph.prebuilt import create_react_agent
+from langgraph.prebuilt import ToolNode
 from langgraph.types import Command
-from pydantic import BaseModel, Field
 
 from ai_models.chat import chat_model, chat_model_heavy, chat_model_light  # noqa: F401
 from ai_models.llm import llm, llm_heavy, llm_light  # noqa: F401
@@ -19,23 +18,15 @@ from tools.search import search_web
 from utils.search import calculate_overall_sentiment_score
 
 DEBUG = os.getenv("DEBUG", "0") == "1"
-SUMMARY_LENGTH: Literal["short", "medium", "long"] = "medium"
+ANALYSIS_LENGTH: Literal["short", "medium", "long"] = "short"
 
 logger = logging.getLogger(__name__)
-logger.info(f"SUMMARY_LENGTH set to {SUMMARY_LENGTH}")
-
-
-class AnalysisResponseFormat(BaseModel):
-    analysis_result: str = Field(description="Detailed analysis result")
-    analysis_score: float = Field(
-        description="Overall score for the stock analysis between 0.000 and 1.000 with 3 decimal points, i.e. 0.524",
-        default=0.000,
-    )
+logger.info(f"ANALYSIS_LENGTH set to {ANALYSIS_LENGTH}")
 
 
 def perform_analysis_node(state: AnalyzerAgentState) -> dict | Command:
     """
-    Performs stock analysis based on the provided data
+    Performs stock analysis based on the provided data and using web search tools
     """
 
     logger.debug("Entering perform_analysis_node in analyzer agent")
@@ -71,43 +62,17 @@ def perform_analysis_node(state: AnalyzerAgentState) -> dict | Command:
                 ),
                 "sentiment_score": sentiment_score,
                 "search_summary": state["search_summary"],
-                "summary_length": SUMMARY_LENGTH,
+                "analysis_length": ANALYSIS_LENGTH,
             }
         )
 
-        sub_agent = create_react_agent(
-            model=chat_model,
-            tools=[search_web],
-            response_format=AnalysisResponseFormat,
-            name=f"{ANALYZER_AGENT_NAME}-react-agent",
-        )
-
-        analysis_response = sub_agent.invoke(messages)
-
+        analysis_response = chat_model.bind_tools([search_web]).invoke(messages)
         logger.debug(f"Analysis Response: {analysis_response}")
-
-        # return to supervisor
-        if not analysis_response or not analysis_response["structured_response"]:
-            err = "I was unable to perform analysis"
-            logger.error(err)
-            return Command(
-                goto=SUPERVISOR_NAME,
-                update={
-                    "messages": [AIMessage(content=err, name=ANALYZER_AGENT_NAME)],
-                    "analysis_result": None,
-                    "analysis_score": None,
-                },
-                graph=Command.PARENT,
-            )
-
-        structured_response: AnalysisResponseFormat = analysis_response["structured_response"]
-
         logger.debug("Leaving perform_analysis_node")
-        return {
-            "analysis_result": structured_response.analysis_result,
-            "analysis_score": structured_response.analysis_score,
-        }
 
+        return {
+            "messages": analysis_response,
+        }
     except Exception as e:
         err = "I'm sorry, but I encountered an error while analyzing the data"
         logger.error(f"ERROR in perform_analysis_node: {e}")
@@ -122,15 +87,44 @@ def perform_analysis_node(state: AnalyzerAgentState) -> dict | Command:
         )
 
 
+def process_analysis_node(state: AnalyzerAgentState) -> dict:
+    """
+    Processes the AI analysis in the last message and returns the updated state
+    """
+    ai_message = state["messages"][-1]
+    logger.debug("Entering process_analysis_node in analyzer agent")
+
+    logger.debug("Leaving process_analysis_node with data")
+
+    return {
+        "analysis_result": ai_message.content,
+        "analysis_score": 0.0,
+    }
+
+
+def routing_condition(state: AnalyzerAgentState) -> Literal["tools", "process_analysis_node"]:
+    """
+    Does routing for tools and the last node
+    """
+    ai_message = state["messages"][-1] if state["messages"] else None
+    if isinstance(ai_message, AIMessage) and hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0:
+        return "tools"
+    return "process_analysis_node"
+
+
 analyzer_agent = (
     StateGraph(AnalyzerAgentState)
     .add_node(
         "perform_analysis_node",
         perform_analysis_node,
-        destinations=(END,),
+        destinations=("tools", "process_analysis_node"),
     )
+    .add_node("tools", ToolNode([search_web]), destinations=("perform_analysis_node",))
+    .add_node("process_analysis_node", process_analysis_node, destinations=(END,))
+    .add_conditional_edges("perform_analysis_node", routing_condition)
+    .add_edge("tools", "perform_analysis_node")
     .set_entry_point("perform_analysis_node")
-    .set_finish_point("perform_analysis_node")
+    .set_finish_point("process_analysis_node")
     .compile(name=ANALYZER_AGENT_NAME, debug=DEBUG)
 )
 

@@ -23,10 +23,10 @@ chat_model_light = init_chat_model(
 chat_model = init_chat_model(
     model=CHAT_MODEL,
     temperature=TEMPERATURE,
-    max_tokens=2048,
+    max_tokens=4096,
 )
 chat_model_heavy = init_chat_model(
     model=CHAT_MODEL_HEAVY,
     temperature=TEMPERATURE,
-    max_tokens=4096,
+    max_tokens=8192,
 )

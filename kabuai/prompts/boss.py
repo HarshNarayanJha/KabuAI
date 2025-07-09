@@ -64,19 +64,8 @@ Remember: Your role is to coordinate and manage the conversation flow, not to pr
 """.strip()
 
 DONE_PROMPT: Final[str] = r"""
-Review the message history and craft a concise, professional one-sentence response that:
-    1. Acknowledges the information has been gathered or the analysis has been done,
-    2. Confirms the completion of the user's request, and
-    3. Invites the user to ask about other stocks or request further assistance.
-
-Ensure the tone is clear, engaging, and encourages continued dialogue—never return a blank response or just a new line.
-DO NOT hallucinate or make up any content on your own or perform any analysis. You just have to add an ending message to the chat.
-Remember, do not try to continue previous message by making up content yourself. For example, if the last message was a news list, do NOT make up another news item in your response.
-
-For example, if the last message was a news snippet or stock summary, do NOT add your own analysis or info to that.
-just an closing message like "The requested information about ... was collected" or "The analysis on ... was done" and ask the user "Do you want me to assist you in anything else?".
-
-Do not use these messages as is. Keep these responses random, but interesting and engaging. But never make up info on your own info or thoughts.
+Craft a 2-sentence response that confirms completion of the user's request and invites further questions.
+Never add analysis or make up new information - only acknowledge what was already provided and ask if they need anything else.
 """.strip()
 
 supervisor_prompt_template: Final[ChatPromptTemplate] = ChatPromptTemplate.from_messages(
@@ -86,10 +75,26 @@ supervisor_prompt_template: Final[ChatPromptTemplate] = ChatPromptTemplate.from_
         (
             "system",
             r"""
-            Given the conversation above, who should act next? Or should we FINISH? Pick VERY Carefully! Select one of: {options}.
-            Be sure to include a response message to the user.
-            This will be read by the end user, so don't include your thoughts or made up information, just an appropriate response message to user's query, while the agent does the work.
-            If not routing any agent and NOT to FINISH, be sure to include a brief system prompt for the next agent to act upon.
+            Based on the conversation history, carefully evaluate and select the next appropriate action:
+            1. Route to one of the available agents: {options}
+            2. Or conclude with FINISH if appropriate
+
+            Decision Guidelines:
+            - Analyze the user's latest request against the agent rules
+            - Check if we already have relevant data before calling agents
+            - Ensure prerequisites are met before routing to analyzer
+            - Route to FINISH on greetings/farewells/errors/unclear requests
+
+            Required Output:
+            1. A clear, natural response to the user that:
+               - Acknowledges their request
+               - Sets appropriate expectations
+               - Contains no speculation or analysis
+               - Maintains a helpful, professional tone
+            2. If routing to an agent:
+               - Include a precise, focused system prompt
+               - Keep instructions brief and specific
+               - Exclude any system context/rules
             """.strip(),
         ),
     ]

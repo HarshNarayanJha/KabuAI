@@ -31,7 +31,7 @@ if LLM_MODEL_HEAVY.startswith("google_genai"):
     llm_heavy = GoogleGenerativeAI(
         model=LLM_MODEL_HEAVY.split(":")[1],
         temperature=TEMPERATURE,
-        max_tokens=4096,
+        max_tokens=8192,
     )
 elif LLM_MODEL_HEAVY.startswith("ollama"):
     llm_heavy = OllamaLLM(
@@ -45,7 +45,7 @@ if LLM_MODEL.startswith("google_genai"):
     llm = GoogleGenerativeAI(
         model=LLM_MODEL.split(":")[1],
         temperature=TEMPERATURE,
-        max_tokens=2048,
+        max_tokens=4096,
     )
 elif LLM_MODEL.startswith("ollama"):
     llm = OllamaLLM(

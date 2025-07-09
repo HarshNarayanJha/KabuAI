@@ -114,10 +114,11 @@ if (
         st.rerun()
 
     with st.chat_message("assistant"):
+        handoff_spinner = ControlledSpinner("Calling agent...")
+
         handoff_section = st.empty()
         tool_section = st.empty()
 
-        handoff_spinner = ControlledSpinner("Calling agent...")
         tool_spinner = ControlledSpinner("Calling tool...")
 
         stock_placeholder = st.empty()
@@ -132,9 +133,9 @@ if (
         with EventSource(URL, method="POST", headers=HEADERS, data=state, timeout=30) as event_source:
             try:
                 for event in event_source:
+                    logger.debug(f"GOT DATA: {event.data}")
                     data = Response(**json.loads(event.data or "{}"))
 
-                    logger.debug(f"GOT DATA: {data}")
                     match data.type:
                         case "handoff":
                             if data.arguments is None:
@@ -145,11 +146,11 @@ if (
                                 message_placeholder.markdown(escape_markdown(data.arguments["message"]) + "| ")
                                 continue
 
-                            with handoff_section.expander("Delegating Task"):
-                                st.code(f"Asking {data.arguments.get('next', 'agent')} for help", language=None)
-
                             handoff_spinner.set_text(data.arguments.get("message", "Working..."))
                             handoff_spinner.start()
+
+                            with handoff_section.expander("Delegating Task"):
+                                st.code(f"Asking {data.arguments.get('next', 'agent')} for help", language=None)
 
                         case "tool":
                             with tool_section.expander(data.name or "Some Tool", expanded=True):
@@ -171,7 +172,7 @@ if (
                                         st.markdown(escape_markdown(msg.content.strip()))
 
                                 if data.state.next:
-                                    handoff_spinner.stop()
+                                    # handoff_spinner.stop()
                                     st.session_state.state.next = data.state.next
                                     # essential to stop the SSE streaming, otherwise it will keep sending messages!
                                     if data.state.next == "__end__":
@@ -245,8 +246,7 @@ if (
                                     st.session_state.state.analysis_score = data.state.analysis_score
 
                         case "chunk":
-                            # stop handoff spinner on state.next update instead
-                            # handoff_spinner.stop()
+                            handoff_spinner.stop()
                             tool_spinner.stop()
 
                             if data.content and data.content.strip():

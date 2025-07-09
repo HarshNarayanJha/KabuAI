@@ -44,7 +44,7 @@ def stock_details_node(state: StockAgentState) -> dict | Command:
             chat_model_heavy.with_structured_output(StockDetailsResponseFormat).invoke(messages),
         )
 
-        logger.debug("TickerResponse:", ticker_response.ticker_or_name)
+        logger.debug(f"TickerResponse:, {ticker_response.ticker_or_name}")
 
         if not ticker_response or not ticker_response.ticker_or_name:
             err = f"Did not get a valid ticker response: {ticker_response}"

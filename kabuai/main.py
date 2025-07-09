@@ -295,6 +295,20 @@ async def chat(request: Request) -> StreamingResponse:
                 elif "perform_analysis_node" in data:
                     updated_state = cast(dict[str, Any], data["perform_analysis_node"])
 
+                    if "messages" in updated_state:
+                        # don't allow messages update from this node
+                        del updated_state["messages"]
+
+                    yield sse_format(
+                        Response(
+                            type="update",
+                            state=updated_state,
+                        )
+                    )
+
+                elif "process_analysis_node" in data:
+                    updated_state = cast(dict[str, Any], data["process_analysis_node"])
+
                     yield sse_format(
                         Response(
                             type="update",

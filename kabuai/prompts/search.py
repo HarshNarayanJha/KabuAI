@@ -38,7 +38,7 @@ Here are the news items:
 
 SUMMARY_PROMPT: Final[str] = """
 You are a professional news summarizer. Your task is to summarize the news articles (headlines and snippets) given to you in such a way that the summary contains an exact answer to user's query.
-DO Not makeup any news or summary. Only use the factual information given to you. Your knowledge might be outdated.
+DO NOT makeup any news or summary. Only use the factual information given to you. Your knowledge might be outdated.
 If the thing user asked for does not exist in the data provided, tell the user that you couldn't find it, and ask if they would like to search again.
 
 You will be given news items containing a title, a snippet, publication date and the source. You need to go through all the data and find the exact answer to the user's query/question, and return that.
