@@ -61,16 +61,18 @@ async def health():
 @app.post("/chat")
 async def chat(request: Request) -> StreamingResponse:
     state: StockBossState = {
-        "messages": request.state.messages or [],
-        "stock_data": request.state.stock_data or None,
-        "stock_summary": request.state.stock_summary or None,
-        "ticker": request.state.ticker or None,
+        "messages": request.state.messages,
+        "stock_data": request.state.stock_data,
+        "stock_summary": request.state.stock_summary,
+        "ticker": request.state.ticker,
         "next": request.state.next,
-        "search_query": request.state.search_query or None,
-        "search_results": request.state.search_results or [],
-        "search_summary": request.state.search_summary or None,
-        "analysis_result": request.state.analysis_result or None,
-        "analysis_score": request.state.analysis_score or None,
+        "plan": request.state.plan,
+        "step": request.state.step,
+        "search_query": request.state.search_query,
+        "search_results": request.state.search_results,
+        "search_summary": request.state.search_summary,
+        "analysis_result": request.state.analysis_result,
+        "analysis_score": request.state.analysis_score,
     }
 
     async def stream_generator():
@@ -80,7 +82,7 @@ async def chat(request: Request) -> StreamingResponse:
         # tasks -> for context changes
 
         async for namespace, mode, data in boss.astream(
-            state, stream_mode=["messages", "updates", "tasks"], subgraphs=True
+            state, stream_mode=["messages", "updates", "tasks", "custom"], subgraphs=True
         ):
             logger.debug(namespace)
             logger.debug(mode)
@@ -94,14 +96,22 @@ async def chat(request: Request) -> StreamingResponse:
                 # identify tool call
                 if token.additional_kwargs and "function_call" in token.additional_kwargs:
                     if node_name == SUPERVISOR_NAME:
-                        # it is the routing call
-                        # yield handoff message
-                        yield sse_format(
-                            Response(
-                                type="handoff",
-                                arguments=json.loads(token.additional_kwargs["function_call"]["arguments"]),
+                        if token.additional_kwargs["function_call"]["name"] == "Router":
+                            # now we need to use custom events for handoff events
+                            logger.warning(
+                                "Ignoring Router function call in supervisor. custom event 'handoff' is handling these now."
                             )
-                        )
+                        else:
+                            logger.warning("Shouldn't have happen, another tool call in supervisor.")
+                            # no longer true, since it is a plan now
+                            # it is the routing call
+                            # yield handoff message
+                            yield sse_format(
+                                Response(
+                                    type="handoff",
+                                    arguments=json.loads(token.additional_kwargs["function_call"]["arguments"]),
+                                )
+                            )
 
                     elif node_name in (STOCK_AGENT_NAME, "stock_details_node"):
                         # it is the ticker tool call
@@ -333,8 +343,21 @@ async def chat(request: Request) -> StreamingResponse:
                         direction=direction,
                     )
                 )
+            elif mode == "custom":
+                # emit custom events
+                data = cast(dict[str, Any], data)
+                if handoff := data.get("handoff"):
+                    yield sse_format(
+                        Response(
+                            type="handoff",
+                            arguments=handoff,
+                        )
+                    )
+                else:
+                    logger.warning("Unknown custom event detected.")
+
             else:
-                raise ValueError(f"Invalid Mode {mode}")
+                logger.warning(f"Unknown mode detected {mode}")
 
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
@@ -346,6 +369,8 @@ if __name__ == "__main__":
         "stock_summary": None,
         "ticker": None,
         "next": "",
+        "plan": [],
+        "step": -1,
         "search_query": None,
         "search_results": [],
         "search_summary": None,
@@ -353,7 +378,23 @@ if __name__ == "__main__":
         "analysis_score": None,
     }
     while True:
-        pprint([(message.type, message.content, message.name) for message in state["messages"]])
+        print("========\n\n")
+        pprint(
+            {
+                "messages": [(message.type, message.content, message.name) for message in state["messages"]],
+                "stock_data": f"{state['stock_data'].metadata}..." if state["stock_data"] else None,
+                "stock_summary": f"{state['stock_summary'][:30]}..." if state["stock_summary"] else None,
+                "ticker": state["ticker"],
+                "plan": ", ".join([x.agent for x in state["plan"]]),
+                "step": state["step"],
+                "next": state["next"],
+                "search_query": state["search_query"],
+                "search_results": len(state["search_results"]),
+                "search_summary": f"{state['search_summary'][:30]}..." if state["search_summary"] else None,
+                "analysis_result": f"{state['analysis_result'][:30]}..." if state["analysis_result"] else None,
+            }
+        )
+        print("\n\n========")
 
         query = input("You> ").strip()
         state["messages"].append(HumanMessage(query))

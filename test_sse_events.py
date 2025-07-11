@@ -26,9 +26,11 @@ def test_chat():
     data = {
         "state": {
             "messages": [
-                {"type": "human", "content": "Hello, can you fetch me details for the Walt Disney?"},
+                {"type": "human", "content": "Detailed report on Apple?"},
             ],
             "ticker": None,
+            "plan": [],
+            "step": -1,
             "stock_data": None,
             "stock_summary": None,
             "search_query": None,
@@ -66,7 +68,7 @@ def test_chat():
                         printable_state["search_results"] = str(printable_state.pop("search_results"))[:30]
                     if "search_summary" in printable_state:
                         printable_state["search_summary"] = str(printable_state.pop("search_summary"))[:30]
-                    print(f"State: {data.state}")
+                    print(f"State: {printable_state}")
 
                     if data.state.get("next", None) == "__end__":
                         return
