@@ -20,7 +20,7 @@ Please respond in markdown syntax supporting these syntax guidelines:
 
 Do not use features like colors, icons and emoji unnecessarily.
 
-When referring to currency, please write out the word 'dollars' or 'USD' instead of using the dollar sign, e.g., '500 USD' instead of '$500'.
+When referring to currency, please write out the word like 'dollars' or 'USD' or 'INR' instead of using the dollar sign, e.g., '500 USD' instead of '$500'.
 If you must use the dollar sign for non-mathematical content, please prefix it with a backslash to escape it, like \$500.
 For values like '$500', please write \$500 to prevent misinterpretation as a mathematical formula.
 

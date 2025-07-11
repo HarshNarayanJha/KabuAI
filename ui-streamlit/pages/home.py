@@ -138,6 +138,8 @@ def draw_news_sources(news_sources: list[SearchResult], container: DeltaGenerato
 
 initial_state = APIState(
     next="",
+    plan=[],
+    step=-1,
     messages=[
         Message(type="system", content=SYSTEM_PROMPT),
         Message(type="ai", content=INITIAL_MESSAGE, name=SUPERVISOR_NAME),
@@ -249,7 +251,7 @@ if (
                             if data.arguments is None:
                                 continue
 
-                            if data.arguments.get("next") == "FINISH":
+                            if data.arguments.get("next") == "__end__":
                                 # grab and show the message, that is the AI response
                                 message_placeholder.markdown(escape_markdown(data.arguments["message"]) + "| ")
                                 continue
@@ -267,11 +269,6 @@ if (
                                 )
                             )
                             draw_tool_call(data.name or "Some Tool", data.arguments, tool_section, tool_spinner)
-                            # with tool_section.expander(data.name or "Some Tool", expanded=True):
-                            #     st.code(data.arguments)
-
-                            #     tool_spinner.set_text("Calling tool...")
-                            #     tool_spinner.start()
 
                         case "update":
                             # handoff_spinner.stop()
@@ -309,31 +306,6 @@ if (
                                             ChatEntry(entry_type="stock_card", stock_data=data.state.stock_data)
                                         )
                                         draw_stock_cards(data.state.stock_data, stock_placeholder)
-                                        # stock_placeholder.empty()
-                                        # with stock_placeholder:
-                                        #     col1, col2 = st.columns(2)
-
-                                        #     _label = f"**{data.state.stock_data.metadata.symbol} _{data.state.stock_data.company.longName}_**"
-                                        #     _latest_price = f"${data.state.stock_data.prices[-1].close:.2f}"
-                                        #     _delta = f"{
-                                        #         (
-                                        #             data.state.stock_data.prices[-1].close
-                                        #             - data.state.stock_data.prices[-1].open
-                                        #         ):.2f}"
-
-                                        #     with col1:
-                                        #         st.text("")
-                                        #         st.metric(_label, _latest_price, _delta)
-                                        #         st.text("")
-
-                                        #     _label = f"**{data.state.stock_data.metadata.symbol} _Market Capital_**"
-                                        #     _market_cap = f"${humanize.intword(data.state.stock_data.metadata.market_cap or 'N/A', format='%.3f').title()}"
-                                        #     _market_cap_full = f"${humanize.intcomma(data.state.stock_data.metadata.market_cap or 'N/A')}"
-
-                                        #     with col2:
-                                        #         st.text("")
-                                        #         st.metric(_label, _market_cap, _market_cap_full, delta_color="off")
-                                        #         st.text("")
 
                                 if data.state.stock_summary is not None:
                                     st.session_state.state.stock_summary = data.state.stock_summary
@@ -368,18 +340,6 @@ if (
                                         ChatEntry(entry_type="news_items", news_items=data.state.search_results)
                                     )
                                     draw_news_sources(data.state.search_results, sources_placeholder)
-
-                                    # sources_placeholder.empty()
-                                    # with sources_placeholder.expander("Sources", expanded=True, icon="📃"):
-                                    #     for res in data.state.search_results:
-                                    #         logger.debug(f"Rendering search results: {res.link}")
-                                    #         color = "blue"
-                                    #         if res.sentiment_score >= 0.25 and res.confidence >= 0.25:
-                                    #             color = "green"
-                                    #         elif res.sentiment_score <= -0.25 and res.confidence >= 0.25:
-                                    #             color = "orange"
-
-                                    #         st.badge(f"{res.source} ({res.link})", icon="🌐", color=color)
 
                                 if data.state.search_summary is not None:
                                     st.session_state.state.search_summary = data.state.search_summary
