@@ -34,3 +34,6 @@ def setup_logging():
 
     logging.getLogger("yfinance").setLevel("ERROR")
     logging.getLogger("peewee").setLevel("ERROR")
+    logging.getLogger("primp.utils").setLevel("ERROR")
+    logging.getLogger("rquest").setLevel("ERROR")
+    logging.getLogger("cookie_store").setLevel("ERROR")

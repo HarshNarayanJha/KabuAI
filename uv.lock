@@ -639,7 +639,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "duckduckgo-search", specifier = ">=8.1.1" },
+    { name = "duckduckgo-search", specifier = ">=8.0.4" },
     { name = "fastapi", specifier = ">=0.115.13" },
     { name = "langchain", extras = ["google-genai"], specifier = ">=0.3.25" },
     { name = "langchain-community", specifier = ">=0.3.25" },

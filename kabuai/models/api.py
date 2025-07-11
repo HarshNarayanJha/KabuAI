@@ -3,12 +3,15 @@ from typing import Any, Literal
 from langchain_core.messages import AnyMessage
 from pydantic import BaseModel, Field
 
+from graph.boss_state import PlanStep
 from models.search import SearchResult
 from models.stock import StockData
 
 
 class APIState(BaseModel):
     next: str = Field(default="")
+    plan: list[PlanStep] = Field(default=[])
+    step: int = Field(default=-1)
     messages: list[AnyMessage] = Field(default=[])
     # stock agent
     ticker: str | None = Field(default=None)

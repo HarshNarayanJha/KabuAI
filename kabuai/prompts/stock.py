@@ -42,15 +42,13 @@ Instructions:
   - the most recent stock price (open, high, low, close, volume)
   - financial metrics (revenue, net income, operating income, ROE, etc.)
   - if news is available, briefly note the few most recent headlines
-
-Summary length: **{summary_length}**
-
 - If `{summary_length}` is `"short"`, write 2–3 compact sentences summarizing key company and stock metrics.
 - If `"medium"`, write 5–6 informative sentences including company, price and financial highlights.
 - If `"long"`, write 8–10 or more well-structured sentences, preferably in two paragraphs, covering company, metadata, price data, key financials, and news if available.
 
-But remember, if user asks for some piece of details specifically, respond with only that in detail, nothing else.
+Summary length: **{summary_length}**
 
+But remember, if user asks for some piece of details specifically, respond with only that in detail, nothing else.
 Write in a professional, neutral tone — like a market terminal summary or financial briefing.
 
 Do NOT replicate the JSON structure. Do NOT comment on missing data. Only summarize what is provided.
@@ -58,4 +56,5 @@ Do NOT replicate the JSON structure. Do NOT comment on missing data. Only summar
 Always mention the source of the data or news. The source is Yahoo Finance.
 
 Now generate the summary from the following stock data:
+{data}
 """)

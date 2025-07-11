@@ -2,24 +2,32 @@ import logging
 import os
 from datetime import datetime
 from pprint import pprint
-from typing import Literal, cast
+from typing import cast
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.config import get_stream_writer
 from langgraph.graph import END, StateGraph
 from langgraph.types import Command, Send
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from agents.analyzer import analyzer_agent
 from agents.search import search_agent
 from agents.stock import stock_agent
 from ai_models.chat import chat_model, chat_model_heavy, chat_model_light  # noqa: F401
 from ai_models.llm import llm, llm_heavy, llm_light  # noqa: F401
-from constants.agents import ANALYZER_AGENT_NAME, MEMBERS, SEARCH_AGENT_NAME, STOCK_AGENT_NAME, SUPERVISOR_NAME
+from constants.agents import (
+    ANALYZER_AGENT_NAME,
+    MEMBERS,
+    MEMBERS_DESCRIPTIONS,
+    SEARCH_AGENT_NAME,
+    STOCK_AGENT_NAME,
+    SUPERVISOR_NAME,
+)
 from graph.analyzer_state import AnalyzerAgentState
-from graph.boss_state import StockBossState
+from graph.boss_state import PlanStep, StockBossState
 from graph.search_state import SearchAgentState
 from graph.stock_state import StockAgentState
 from prompts.boss import DONE_PROMPT, supervisor_prompt_template
@@ -32,97 +40,156 @@ logger = logging.getLogger(__name__)
 
 
 class Router(BaseModel):
-    next: Literal["stock_agent", "search_agent", "analyzer_agent", "FINISH"] = Field(
-        description="Agent to route to next. If no agents needed, route to FINISH."
-    )
-    message: str = Field(..., description="Response Message to the user.")
-    system_instruction: str = Field(..., description="Very Brief system instruction to the agent you are routing to.")
+    plan: list[PlanStep]
 
 
 def boss_node(state: StockBossState) -> Command | dict:
-    logging.debug("Entering boss_node in supervisor")
+    logger.debug("Entering boss_node in supervisor")
+    writer = get_stream_writer()
 
     try:
-        # TODO: use a next array for this
-        # Let's check if we already have the summary
-        # In the final version we will check for the final verdict
-        last_message = state["messages"][-1] if state["messages"] else None
-        if (
-            last_message
-            # last message is from an agent
-            and last_message.type == "ai"
-            and last_message.name in MEMBERS
-            and (
-                # any of the state vars from any agent is there
-                (last_message.name == STOCK_AGENT_NAME and state["stock_summary"] and state["stock_data"])
-                or (last_message.name == SEARCH_AGENT_NAME and state["search_results"] and state["search_summary"])
-                or (
-                    last_message.name == ANALYZER_AGENT_NAME
-                    and state["analysis_result"]
-                    and state["analysis_score"] is not None
+        # check if we have a plan
+        if state["plan"] and state["step"] >= 0:
+            logger.debug("Continuing the plan...")
+
+            if len(state["plan"]) == state["step"] + 1:
+                # means last step in plan wasn't FINISH
+                logger.warning(
+                    "No more steps, should have routed to end already. Routing to end. Leaving boss_node in supervisor."
                 )
+                writer({"handoff": {"next": END}})
+                prompt = ChatPromptTemplate.from_messages(
+                    [
+                        ("system", DONE_PROMPT),
+                        MessagesPlaceholder(variable_name="messages"),
+                    ]
+                )
+                supervisor_response = chat_model_light.invoke(prompt.invoke({"messages": state["messages"]}))
+
+                return {
+                    "messages": [
+                        AIMessage(
+                            supervisor_response.content,
+                            name=SUPERVISOR_NAME,
+                        ),
+                    ],
+                    "next": END,
+                    "plan": [],
+                    "step": -1,
+                }
+
+            next_step = state["plan"][state["step"] + 1]
+            goto = next_step.agent
+            if goto == "FINISH":
+                logger.debug(
+                    f"Leaving boss_node in supervisor since routing to FINISH as part of the plan step {state['step'] + 1}",
+                )
+                writer({"handoff": {"next": END, "message": next_step.message}})
+
+                prompt = ChatPromptTemplate.from_messages(
+                    [
+                        ("system", DONE_PROMPT),
+                        MessagesPlaceholder(variable_name="messages"),
+                    ]
+                )
+                supervisor_response = chat_model_light.invoke(prompt.invoke({"messages": state["messages"]}))
+
+                return {
+                    "messages": [
+                        AIMessage(
+                            supervisor_response.content,
+                            name=SUPERVISOR_NAME,
+                        ),
+                    ],
+                    "next": END,
+                    "plan": [],
+                    "step": -1,
+                }
+
+            logger.debug(
+                f"Leaving boss_node in supervisor since routing to {goto} as part of the plan step {state['step'] + 1}"
             )
-        ):
-            prompt = ChatPromptTemplate.from_messages(
-                [
-                    ("system", DONE_PROMPT),
-                    MessagesPlaceholder(variable_name="messages"),
-                ]
+            writer(
+                {
+                    "handoff": {
+                        "next": goto,
+                        "system_instruction": next_step.system_instruction,
+                        "message": next_step.message,
+                    }
+                }
             )
 
-            supervisor_response = chat_model.invoke(prompt.invoke({"messages": state["messages"]}))
-
-            # completed
-            logger.debug("leaving boss_node in supervisor since last response was from some agent with data")
-            return {
-                "messages": [
-                    AIMessage(
-                        supervisor_response.content,
-                        name=SUPERVISOR_NAME,
+            return Command(
+                goto=goto,
+                update={
+                    "step": state["step"] + 1,
+                    "next": Send(
+                        goto,
+                        {
+                            "messages": [
+                                HumanMessage(content=next_step.request),
+                                SystemMessage(content=next_step.system_instruction, name=SUPERVISOR_NAME),
+                            ],
+                        },
                     ),
-                ],
-                "next": END,
-            }
+                },
+            )
 
+        # no plan. create one.
         messages = supervisor_prompt_template.invoke(
             {
                 "messages": state["messages"],
                 "options": ", ".join(OPTIONS),
                 "members": ", ".join(MEMBERS),
+                "members_descriptions": "\n".join([f"{k} - {v}" for k, v in MEMBERS_DESCRIPTIONS.items()]),
                 "today": datetime.today().isoformat(),
             }
         )
 
         response = cast(Router, chat_model_heavy.with_structured_output(Router).invoke(messages))
-
         logger.debug(f"Got router response {response}")
 
-        if not response or not response.next:
-            logger.debug("Leaving boss_node in supervisor due to some error")
+        if not response or not response.plan:
+            logger.error("Leaving boss_node in supervisor since no plan was created")
             return {
                 "next": END,
                 "messages": [AIMessage("I have encountered an error. Please try again.", name=SUPERVISOR_NAME)],
             }
 
-        goto = response.next
+        goto = response.plan[0].agent
         if goto == "FINISH":
-            finishing_update: dict = {"next": END}
-            if response.message:
-                finishing_update["messages"] = [AIMessage(response.message, name=SUPERVISOR_NAME)]
+            finishing_update: dict = {"next": END, "step": -1, "plan": []}
+            if response.plan[0].message:
+                finishing_update["messages"] = [AIMessage(response.plan[0].message, name=SUPERVISOR_NAME)]
 
-            logger.debug("Leaving boss_node in supervisor since routed to FINISH")
+            logger.debug("Leaving boss_node in supervisor since routed to FINISH with no plan.")
+            writer({"handoff": {"next": END, "message": response.plan[0].message}})
+
             return finishing_update
 
-        logger.debug(f"Leaving boss_node in supervisor since going to {goto}")
+        # goto to the first agent in plan
+        logger.debug(f"Leaving boss_node in supervisor since going to {goto} as the first step in plan.")
+        writer(
+            {
+                "handoff": {
+                    "next": goto,
+                    "message": response.plan[0].message,
+                    "system_instruction": response.plan[0].system_instruction,
+                }
+            }
+        )
+
         return Command(
             goto=goto,
             update={
+                "step": 0,
+                "plan": response.plan,
                 "next": Send(
                     goto,
                     {
                         "messages": [
-                            HumanMessage(state["messages"][-1].content),
-                            SystemMessage(response.system_instruction, name=SUPERVISOR_NAME),
+                            HumanMessage(response.plan[0].request),
+                            SystemMessage(response.plan[0].system_instruction, name=SUPERVISOR_NAME),
                         ]
                     },
                 ),
@@ -130,7 +197,7 @@ def boss_node(state: StockBossState) -> Command | dict:
         )
     except Exception as e:
         error_msg = "I encountered an error while processing your query"
-        logger.error(error_msg + str(e))
+        logger.error(f"{error_msg}. ERROR: {e}")
 
         return {
             "next": END,
@@ -312,7 +379,9 @@ if __name__ == "__main__":
         "stock_data": None,
         "stock_summary": None,
         "ticker": None,
+        "plan": [],
         "next": "",
+        "step": -1,
         "search_query": None,
         "search_results": [],
         "search_summary": None,
@@ -330,6 +399,8 @@ if __name__ == "__main__":
                 "stock_data": f"{state['stock_data'].metadata}..." if state["stock_data"] else None,
                 "stock_summary": f"{state['stock_summary'][:30]}..." if state["stock_summary"] else None,
                 "ticker": state["ticker"],
+                "plan": ", ".join([x.agent for x in state["plan"]]),
+                "step": state["step"],
                 "next": state["next"],
                 "search_query": state["search_query"],
                 "search_results": len(state["search_results"]),

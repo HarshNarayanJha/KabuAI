@@ -124,9 +124,9 @@ def stock_summary_node(state: StockAgentState) -> dict | Command:
             SystemMessage(
                 summary_prompt.format(
                     summary_length=SUMMARY_LENGTH,
+                    data=stock_data.model_dump_json(),
                 ),
             ),
-            SystemMessage(stock_data.model_dump_json()),
             *state["messages"],
         ]
 

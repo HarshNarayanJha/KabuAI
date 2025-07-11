@@ -30,6 +30,9 @@ def search_web(query: str, what: Literal["news", "text"] = "news") -> list[Searc
         list[SearchResult]: A list of search results.
     """
 
+    logger.warning("Changing what to news even if text was passed, since text output is... uh..")
+    what = "news"
+
     search = DuckDuckGoSearchResults(output_format="json", backend=what, num_results=5)
     results = search.invoke(query)
 
