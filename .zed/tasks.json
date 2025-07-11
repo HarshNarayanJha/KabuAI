@@ -1,14 +1,35 @@
 [
-	{
-		"label": "Run streamlit",
-		"command": "uv run --env-file .env streamlit run ui/app.py",
-		"cwd": ".",
-		"use_new_terminal": false,
-		"allow_concurrent_runs": false,
-		"reveal": "always",
-		"reveal_target": "dock",
-		"hide": "on_success",
-		"shell": "system",
-		"tags": []
-	}
+  {
+    "label": "Run streamlit",
+    "command": "./run_ui.sh",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+    "reveal_target": "dock",
+    "hide": "never",
+    "shell": "system",
+    "tags": ["ui"]
+  },
+  {
+    "label": "Run Server",
+    "command": "./run_server.sh",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+    "reveal_target": "dock",
+    "hide": "never",
+    "shell": "system",
+    "tags": ["server"]
+  },
+  {
+    "label": "Run CLI",
+    "command": "./run_cli.sh",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+    "reveal_target": "dock",
+    "hide": "never",
+    "shell": "system",
+    "tags": ["cli"]
+  }
 ]

@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 
-uv run --env-file .env.ui streamlit run ui/app.py
+cd ui-streamlit
+uv run --env-file .env.ui streamlit run app.py

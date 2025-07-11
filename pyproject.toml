@@ -1,5 +1,5 @@
 [project]
-name = "kabuai"
+name = "kabuai-monorepo"
 version = "0.1.0"
 description = "Next Gen AI Agent for Stock Market Analysis and Guidance. Smart Investing Conversations Start Here."
 readme = "README.md"
@@ -8,21 +8,13 @@ license = "LICENSE"
 keywords = ["finance", "stock market", "investment", "AI", "agent", "stock"]
 requires-python = ">=3.13"
 dependencies = [
-    "duckduckgo-search>=8.0.4",
-    "fastapi>=0.115.13",
-    "humanize>=4.12.3",
-    "langchain-community>=0.3.25",
-    "langchain-ollama>=0.3.3",
-    "langchain[google-genai]>=0.3.25",
-    "langgraph>=0.5.0",
-    "requests-sse>=0.5.2",
-    "streamlit>=1.45.1",
-    "uvicorn[standard]>=0.35.0",
-    "yfinance==0.2.61",
+    "kabuai",
+    "ui-streamlit",
 ]
 
-[tool.ruff.lint.isort]
-known-first-party = ["kabuai", "agents", "constants", "graph", "models", "prompts", "tools", "ai_models", "utils"]
+[tool.uv.sources]
+kabuai = { workspace = true }
+ui-streamlit = { workspace = true }
 
 [tool.basedpyright]
 reportUnusedCallResult = "none"
@@ -37,10 +29,11 @@ reportAny = "none"
 useLibraryCodeForTypes = true
 executionEnvironments = [
     { root = "kabuai" },
-    { root = "ui"}
+    { root = "ui-streamlit"}
 ]
 
-[dependency-groups]
-dev = [
-    "langgraph-cli[inmem]>=0.3.3",
+[tool.uv.workspace]
+members = [
+    "kabuai",
+    "ui-streamlit",
 ]

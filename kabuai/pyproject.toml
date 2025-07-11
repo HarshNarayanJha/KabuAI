@@ -1,0 +1,26 @@
+[project]
+name = "kabuai"
+version = "0.1.0"
+description = "Next Gen AI Agent for Stock Market Analysis and Guidance. LangGraph/FastAPI backend."
+readme = "README.md"
+authors = [{ name = "Harsh Narayan Jha", email = "harshnj@proton.me" }]
+requires-python = ">=3.13"
+keywords = ["finance", "stock market", "investment", "AI", "agent", "stock"]
+dependencies = [
+    "duckduckgo-search>=8.0.4",
+    "fastapi>=0.115.13",
+    "langchain-community>=0.3.25",
+    "langchain-ollama>=0.3.3",
+    "langchain[google-genai]>=0.3.25",
+    "langgraph>=0.5.0",
+    "uvicorn[standard]>=0.35.0",
+    "yfinance==0.2.61",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["agents", "constants", "graph", "models", "prompts", "tools", "ai_models", "utils"]
+
+[dependency-groups]
+dev = [
+    # "langgraph-cli[inmem]>=0.3.3",
+]
